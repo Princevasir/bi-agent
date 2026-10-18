@@ -10,6 +10,12 @@ services:
       retries: 5
     environment:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LLM_PROVIDER: ${LLM_PROVIDER:-fake}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-qwen/qwen-2.5-coder-32b-instruct}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-20}
+      LLM_MAX_OUTPUT_TOKENS: ${LLM_MAX_OUTPUT_TOKENS:-512}
+      LLM_TOKEN_BUDGET: ${LLM_TOKEN_BUDGET:-50000}
   frontend:
     build: ./frontend
     ports:
@@ -18,4 +24,4 @@ services:
       backend:
         condition: service_healthy
     environment:
-      BACKEND_URL: http://backend:8000
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}

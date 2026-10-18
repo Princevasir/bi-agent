@@ -1,5 +1,5 @@
 import os
-
+import uuid
 import requests
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
@@ -11,7 +11,11 @@ class BackendError(Exception):
 
 def get_json(path: str, timeout: float = 5.0) -> dict:
     try:
-        r = requests.get(f"{BACKEND_URL}{path}", timeout=timeout)
+        r = requests.get(
+        f"{BACKEND_URL}{path}",
+        headers={"X-Request-ID": str(uuid.uuid4())},
+        timeout=timeout,
+        )
         r.raise_for_status()
         return r.json()
     except requests.Timeout as e:
