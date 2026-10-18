@@ -8,6 +8,8 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
   frontend:
     build: ./frontend
     ports:

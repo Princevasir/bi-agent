@@ -19,3 +19,13 @@ def test_hello():
 
 def test_unknown_route_returns_404():
     assert client.get("/nope").status_code == 404
+
+
+def test_request_id_generated_when_missing():
+    r = client.get("/health")
+    assert r.headers["X-Request-ID"]
+
+
+def test_request_id_echoed_when_provided():
+    r = client.get("/health", headers={"X-Request-ID": "abc-123"})
+    assert r.headers["X-Request-ID"] == "abc-123"
