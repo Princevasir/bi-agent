@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BI Agent MVP: incremental build plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f2f5f7;--surface:#fff;--ink:#14202b;--muted:#566574;--line:#b9c5cd;--acc:#0e7c86;--acc-t:#d6eef0;--amb:#b97a0f;--amb-t:#f8ecd2;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1820;--surface:#172430;--ink:#e6edf2;--muted:#9bacb9;--line:#34475a;--acc:#4fc3cd;--acc-t:#143b40;--amb:#e3a73f;--amb-t:#3b2f12;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0f1820;--surface:#172430;--ink:#e6edf2;--muted:#9bacb9;--line:#34475a;--acc:#4fc3cd;--acc-t:#143b40;--amb:#e3a73f;--amb-t:#3b2f12;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:980px;margin:0 auto;padding:32px 20px 64px}
+h1,h2,h3{font-family:"Bricolage Grotesque",system-ui,sans-serif;line-height:1.15;margin:0}
+h1{font-size:clamp(2rem,5vw,3.1rem);max-width:18ch}
+h2{font-size:1.6rem;margin:56px 0 8px}
+h3{font-size:1.05rem;margin-bottom:6px}
+p{max-width:68ch;margin:8px 0}
+.lede{color:var(--muted);font-size:1.1rem}
+.loop,.flow{display:flex;flex-wrap:wrap;gap:8px;list-style:none;padding:0;margin:18px 0}
+.loop li,.flow li{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 12px;font-size:.92rem}
+.loop li:last-child{border-style:dashed}
+.flow li.llm{background:var(--amb-t);border-color:var(--amb)}
+.flow li.det{background:var(--acc-t);border-color:var(--acc)}
+.key{font-size:.88rem;color:var(--muted)}
+.explorer{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;margin-top:14px}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.tabs button{font:inherit;font-size:.88rem;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px 11px;cursor:pointer}
+.tabs button[aria-pressed="true"]{background:var(--acc);border-color:var(--acc);color:#fff}
+button:focus-visible{outline:3px solid var(--amb);outline-offset:2px}
+.svgwrap{overflow-x:auto}
+svg{min-width:700px;width:100%;height:auto;display:block}
+svg text{fill:var(--ink);font:12px system-ui,sans-serif}
+svg .sub{fill:var(--muted);font-size:10.5px}
+.n rect{fill:var(--surface);stroke:var(--line);stroke-width:1.5}
+.n.new rect{fill:var(--acc-t);stroke:var(--acc);stroke-width:2}
+.n.llm rect{stroke:var(--amb)}
+.e{stroke:var(--line);stroke-width:1.6;fill:none}
+.e.new{stroke:var(--acc);stroke-width:2.2}
+.ghost{opacity:.16}
+.ghost rect{stroke-dasharray:4 3}
+.band rect{fill:none;stroke:var(--line);stroke-dasharray:6 4}
+.cap{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-top:12px;font-size:.93rem}
+.cap p{margin:2px 0}
+.cap b{font-weight:600}
+.phases{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:16px;margin-top:18px}
+.ph{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px}
+.ph ol{margin:8px 0 10px;padding-left:0;list-style:none;font-size:.93rem}
+.ph li{padding:3px 0 3px 40px;position:relative}
+.ph li b{position:absolute;left:0;color:var(--acc);font-weight:600}
+.gate{font-size:.87rem;color:var(--muted);border-top:1px solid var(--line);padding-top:8px;margin:0}
+.rules{columns:2 300px;column-gap:28px;padding-left:20px}
+.rules li{margin-bottom:6px;break-inside:avoid}
+pre{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;overflow-x:auto;font-size:.86rem;line-height:1.5}
+code{font-family:ui-monospace,Menlo,Consolas,monospace}
+</style>
+</head>
+<body>
+<main>
+<h1>BI Agent MVP: build it in verified steps</h1>
+<p class="lede">27 small milestones, from a Hello World API to a deployed natural-language BI agent. Each one is run, tested, committed, and approved before the next begins.</p>
+
+<h2>The loop every milestone follows</h2>
+<ol class="loop">
+<li>Plan</li><li>Implement</li><li>Run</li><li>Test</li><li>Verify</li><li>Save a Git checkpoint</li><li>Wait for your approval, then extend</li>
+</ol>
+<p>Test results are only reported as passed once you have shared the real output. Anything else is labelled "expected".</p>
+
+<h2>How the architecture grows</h2>
+<p>Pick a stage. Highlighted boxes are new at that stage, faded dashed boxes do not exist yet.</p>
+<div class="explorer">
+<div class="tabs" id="tabs" role="group" aria-label="Architecture stage"></div>
+<div class="svgwrap">
+<svg viewBox="0 0 900 460" role="img" aria-label="Architecture diagram that adds components at each stage">
+<g id="edges">
+<path class="e" data-s="1" d="M160 213H195"/>
+<path class="e" data-s="2" d="M345 200L400 106"/>
+<path class="e" data-s="2" d="M540 93L770 93"/>
+<path class="e" data-s="3" d="M345 226L400 346"/>
+<path class="e" data-s="3" d="M540 353H770"/>
+<path class="e" data-s="4" d="M345 213H380"/>
+<path class="e" data-s="4" d="M540 205L575 177"/>
+<path class="e" data-s="4" d="M575 165L540 105"/>
+<path class="e" data-s="4" d="M655 76V92"/>
+<path class="e" data-s="4" d="M655 138V154"/>
+<path class="e" data-s="4" d="M655 200V216"/>
+<path class="e" data-s="4" d="M735 115L770 148"/>
+<path class="e" data-s="4" d="M575 250L540 340"/>
+<path class="e" data-s="5" d="M460 236V258"/>
+<path class="e" data-s="5" d="M540 225L575 295"/>
+<path class="e" data-s="6" d="M270 116V190"/>
+<path class="e" data-s="6" d="M270 236V310"/>
+</g>
+<g id="nodes">
+<g class="n" data-s="0" id="ui"><rect x="20" y="190" width="140" height="46" rx="6"/><text x="90" y="211" text-anchor="middle" class="lab">curl / pytest</text><text x="90" y="226" text-anchor="middle" class="sub">caller</text></g>
+<g class="n" data-s="0"><rect x="195" y="190" width="150" height="46" rx="6"/><text x="270" y="211" text-anchor="middle">FastAPI backend</text><text x="270" y="226" text-anchor="middle" class="sub">/health, /hello</text></g>
+<g class="n" data-s="2" data-llm="1"><rect x="380" y="70" width="160" height="46" rx="6"/><text x="460" y="91" text-anchor="middle">LLM service</text><text x="460" y="106" text-anchor="middle" class="sub">interface + timeouts</text></g>
+<g class="n llm" data-s="2"><rect x="770" y="70" width="120" height="46" rx="6"/><text x="830" y="91" text-anchor="middle">Bedrock</text><text x="830" y="106" text-anchor="middle" class="sub">model API</text></g>
+<g class="n" data-s="4" id="orch"><rect x="380" y="190" width="160" height="46" rx="6"/><text x="460" y="211" text-anchor="middle" class="lab">Query workflow</text><text x="460" y="226" text-anchor="middle" class="sub">plain Python first</text></g>
+<g class="n" data-s="5"><rect x="380" y="258" width="160" height="46" rx="6"/><text x="460" y="279" text-anchor="middle">Conversation state</text><text x="460" y="294" text-anchor="middle" class="sub">analytical context</text></g>
+<g class="n" data-s="3"><rect x="380" y="330" width="160" height="46" rx="6"/><text x="460" y="351" text-anchor="middle">Query executor</text><text x="460" y="366" text-anchor="middle" class="sub">read-only, row limits</text></g>
+<g class="n" data-s="3"><rect x="770" y="330" width="120" height="46" rx="6"/><text x="830" y="351" text-anchor="middle">Analytical DB</text><text x="830" y="366" text-anchor="middle" class="sub">sample data first</text></g>
+<g class="n" data-s="4"><rect x="575" y="30" width="160" height="46" rx="6"/><text x="655" y="51" text-anchor="middle">Metric registry</text><text x="655" y="66" text-anchor="middle" class="sub">governed definitions</text></g>
+<g class="n" data-s="4"><rect x="575" y="92" width="160" height="46" rx="6"/><text x="655" y="113" text-anchor="middle">Metadata retrieval</text><text x="655" y="128" text-anchor="middle" class="sub">schema, columns</text></g>
+<g class="n llm" data-s="4"><rect x="575" y="154" width="160" height="46" rx="6"/><text x="655" y="175" text-anchor="middle">SQL generator</text><text x="655" y="190" text-anchor="middle" class="sub">LLM, fixed schema</text></g>
+<g class="n" data-s="4"><rect x="575" y="216" width="160" height="46" rx="6"/><text x="655" y="237" text-anchor="middle">SQL validator + authz</text><text x="655" y="252" text-anchor="middle" class="sub">SQLGlot, deterministic</text></g>
+<g class="n" data-s="5"><rect x="575" y="278" width="160" height="46" rx="6"/><text x="655" y="299" text-anchor="middle">Chart spec</text><text x="655" y="314" text-anchor="middle" class="sub">structured JSON only</text></g>
+<g class="n" data-s="4"><rect x="770" y="148" width="120" height="46" rx="6"/><text x="830" y="169" text-anchor="middle">PostgreSQL</text><text x="830" y="184" text-anchor="middle" class="sub">metadata store</text></g>
+<g class="n" data-s="6"><rect x="195" y="70" width="150" height="46" rx="6"/><text x="270" y="91" text-anchor="middle">Auth + RBAC</text><text x="270" y="106" text-anchor="middle" class="sub">roles, permissions</text></g>
+<g class="n" data-s="6"><rect x="195" y="310" width="150" height="46" rx="6"/><text x="270" y="331" text-anchor="middle">Audit + monitoring</text><text x="270" y="346" text-anchor="middle" class="sub">logs, correlation IDs</text></g>
+</g>
+<g class="n band" data-s="6" id="band"><rect x="20" y="400" width="870" height="44" rx="8" style="fill:var(--acc-t);stroke:var(--acc)"/><text x="455" y="419" text-anchor="middle">Docker image on ECS/Fargate</text><text x="455" y="434" text-anchor="middle" class="sub">Terraform infrastructure, GitHub Actions CI/CD, smoke tests, rollback</text></g>
+</svg>
+</div>
+<div class="cap" id="cap"></div>
+<p class="key">Amber outline: calls an LLM. Teal highlight: added at this stage. Everything the LLM produces passes through deterministic code before it touches data.</p>
+</div>
+
+<h2>The text-to-SQL request path (milestones 15 to 17)</h2>
+<p>This is the part that needs the most care. The model proposes, deterministic code decides.</p>
+<ol class="flow">
+<li class="det">Question arrives</li>
+<li class="det">Resolve permitted tables and metrics</li>
+<li class="llm">LLM drafts SQL</li>
+<li class="det">Parse and validate with SQLGlot</li>
+<li class="det">Enforce role permissions</li>
+<li class="det">Run read-only with limits</li>
+<li class="det">Check the result</li>
+<li class="llm">LLM writes a grounded answer</li>
+</ol>
+<p class="key">Teal steps are deterministic code. Amber steps use the LLM. A rejected query stops at step 4 or 5 and never reaches the database.</p>
+
+<h2>Roadmap</h2>
+<div class="phases">
+<section class="ph"><h3>Phase 0: Foundation</h3><ol>
+<li><b>M1</b>Verify Python and Git; initialize the project</li>
+<li><b>M2</b>FastAPI with /health and /hello</li>
+<li><b>M3</b>pytest suite and first Git checkpoint</li></ol>
+<p class="gate">Gate: both endpoints respond correctly and tests pass.</p></section>
+<section class="ph"><h3>Phase 1: Minimal application</h3><ol>
+<li><b>M4</b>Minimal Streamlit page</li>
+<li><b>M5</b>Frontend calls backend, with loading and error states</li>
+<li><b>M6</b>Environment config, logging, correlation IDs</li></ol>
+<p class="gate">Gate: the UI shows the backend response; Streamlit calls the API only, with no database access.</p></section>
+<section class="ph"><h3>Phase 2: LLM integration</h3><ol>
+<li><b>M7</b>LLM service interface</li>
+<li><b>M8</b>One working LLM request</li>
+<li><b>M9</b>Failures, timeouts, cost limits</li></ol>
+<p class="gate">Gate: missing credentials, provider errors, and timeouts are handled.</p></section>
+<section class="ph"><h3>Phase 3: Data access</h3><ol>
+<li><b>M10</b>Local sample database and seed data</li>
+<li><b>M11</b>Connectivity and deterministic queries</li>
+<li><b>M12</b>Read-only execution and limits</li></ol>
+<p class="gate">Gate: a known aggregation matches the expected number; writes are refused.</p></section>
+<section class="ph"><h3>Phase 4: BI foundations</h3><ol>
+<li><b>M13</b>Minimal metric registry</li>
+<li><b>M14</b>Schema and metadata retrieval</li>
+<li><b>M15</b>First natural-language-to-SQL flow</li>
+<li><b>M16</b>SQL parsing, validation, authorization</li>
+<li><b>M17</b>Result validation, grounded answers</li></ol>
+<p class="gate">Gate: a golden question set passes, and unsafe SQL is rejected.</p></section>
+<section class="ph"><h3>Phase 5: Conversational BI</h3><ol>
+<li><b>M18</b>LangGraph, only if the working flow justifies it</li>
+<li><b>M19</b>Conversation history and analytical state</li>
+<li><b>M20</b>Follow-up questions and context</li>
+<li><b>M21</b>Tables and basic charts</li></ol>
+<p class="gate">Gate: follow-ups resolve correctly; charts render from a structured spec, never model code.</p></section>
+<section class="ph"><h3>Phase 6: Production readiness</h3><ol>
+<li><b>M22</b>Authentication and RBAC</li>
+<li><b>M23</b>Audit logging and monitoring</li>
+<li><b>M24</b>Regression and evaluation dataset</li>
+<li><b>M25</b>Docker packaging</li>
+<li><b>M26</b>AWS deployment</li>
+<li><b>M27</b>CI/CD, smoke tests, rollback</li></ol>
+<p class="gate">Gate: a deployed build passes smoke tests and can be rolled back.</p></section>
+</div>
+<p><b>Frontend decision:</b> Streamlit replaces Next.js, so no Node.js is needed. It stays a thin client that calls the FastAPI backend over HTTP, which keeps it replaceable if you later need a custom UI or richer authentication.</p>
+<p>Phase 7 (RAG, multiple sources, dashboards, root cause analysis, forecasting) waits until the core is reliable.</p>
+
+<h2>Rules that do not bend</h2>
+<ul class="rules">
+<li>One milestone at a time, then stop for approval.</li>
+<li>Never extend a broken baseline.</li>
+<li>Every capability gets tests; rerun earlier tests after each change.</li>
+<li>No invented test results.</li>
+<li>Add a dependency only when its milestone needs it.</li>
+<li>No generated SQL runs without validation and database-level access controls.</li>
+<li>The LLM never enforces authorization.</li>
+<li>Secrets stay out of source code.</li>
+<li>Diagnose from real error output before changing code.</li>
+<li>Material architecture changes are explained and approved first.</li>
+</ul>
+
+<h2>Next: Milestone 1, environment check</h2>
+<p>Run these and share the output. I can't see your machine, so I won't assume anything passes.</p>
+<pre><code>python3 --version    # expect 3.11 or newer
+git --version        # any recent 2.x
+
+# Does the project folder or a repo already exist?
+ls -d bi-agent 2>/dev/null || echo "no bi-agent folder yet"
+git rev-parse --is-inside-work-tree 2>/dev/null || echo "not inside a Git repo"</code></pre>
+<p>Smallest starting structure once the check is clean: a <code>bi-agent/</code> folder with <code>backend/</code>, a <code>.gitignore</code>, and a <code>README.md</code>. Nothing else yet.</p>
+</main>
+<script>
+var ST=[
+{t:"M2–M3: Backend only",a:"FastAPI with /health and /hello, plus pytest.",n:"Frontend, LLM, database.",g:"Endpoints return the expected JSON; tests pass."},
+{t:"M4–M6: Frontend",a:"Streamlit page, backend integration, config, logging, correlation IDs.",n:"Chat UI, LLM.",g:"UI shows the response; error states work; Streamlit holds no business logic."},
+{t:"M7–M9: LLM",a:"A service interface over one model provider, with timeouts and cost limits.",n:"Agents, SQL generation.",g:"Valid, invalid, and failing requests all behave correctly."},
+{t:"M10–M12: Data access",a:"Sample database, deterministic queries, read-only execution with limits.",n:"Text-to-SQL.",g:"Known aggregation matches; write attempts are refused."},
+{t:"M13–M17: BI core",a:"Metric registry, metadata, SQL generation, SQL validation, authorization, grounded answers.",n:"LangGraph, memory, charts.",g:"Golden questions pass; unsafe SQL is rejected before execution."},
+{t:"M18–M21: Conversational BI",a:"LangGraph if justified, conversation state, follow-ups, tables and charts.",n:"Auth, deployment.",g:"Follow-ups resolve; charts come from a structured spec."},
+{t:"M22–M27: Production",a:"RBAC, audit logging, evaluation set, Docker, AWS, CI/CD.",n:"Post-MVP extensions.",g:"Deployed build passes smoke tests and can roll back."}];
+var LAB={ui:["curl / pytest","Streamlit UI"],orch:["Query workflow","LangGraph workflow"]};
+var tabs=document.getElementById("tabs"),cap=document.getElementById("cap");
+function show(c){
+ var els=document.querySelectorAll("#edges path,#nodes>g,#band");
+ els.forEach(function(e){var s=+e.getAttribute("data-s");
+  e.classList.toggle("ghost",s>c);
+  var cls=e.tagName==="path"?"new":"new";
+  e.classList.toggle("new",s===c);
+  if(e.tagName==="g"&&!e.classList.contains("llm")&&e.hasAttribute("data-llm"))e.classList.add("llm");});
+ document.querySelector("#ui .lab").textContent=LAB.ui[c>=1?1:0];
+ document.querySelector("#orch .lab").textContent=LAB.orch[c>=5?1:0];
+ [].forEach.call(tabs.children,function(b,i){b.setAttribute("aria-pressed",i===c)});
+ var s=ST[c];
+ cap.innerHTML="<div><b>"+s.t+"</b></div><div><b>Added</b><p>"+s.a+"</p></div><div><b>Not yet</b><p>"+s.n+"</p></div><div><b>Gate</b><p>"+s.g+"</p></div>";
+}
+ST.forEach(function(s,i){var b=document.createElement("button");b.type="button";b.textContent=s.t.split(":")[0];b.onclick=function(){show(i)};tabs.appendChild(b)});
+show(0);
+</script>
+</body>
+</html>
