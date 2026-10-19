@@ -13,6 +13,7 @@ from app.llm.base import (
 )
 from app.llm.budget import TokenBudget
 from app.db import DBError, DBTimeoutError, run_readonly
+from app.bi.schema import get_schema
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -98,3 +99,7 @@ async def db_error_handler(request: Request, exc: DBError):
     logger.warning("request_id=%s db_error=%s detail=%s",
                    getattr(request.state, "request_id", "-"), type(exc).__name__, exc)
     return JSONResponse(status_code=status, content={"detail": message})
+
+@app.get("/schema")
+def schema():
+    return get_schema()
