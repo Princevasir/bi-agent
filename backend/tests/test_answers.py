@@ -1,0 +1,125 @@
+from datetime import date
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app.bi import service
+from app.bi.grounding import fallback_answer, is_grounded
+from app.llm import get_llm
+from app.llm.base import LLMResult
+from app.main import app
+
+client = TestClient(app)
+
+QUESTION = "What was revenue by region in September 2026?"
+SQL = ("SELECT r.name, SUM(o.amount) FROM orders o "
+       "JOIN regions r ON o.region_id = r.id GROUP BY r.name")
+RESULT = {
+    "columns": ["region", "revenue"],
+    "rows": [["North", 270.0], ["South", 300.0], ["West", 240.0]],
+    "truncated": False,
+}
+
+
+@pytest.fixture
+def patched(monkeypatch):
+    monkeypatch.setattr(service, "generate_sql", lambda q, g, t: SQL)
+    monkeypatch.setattr(service, "run_readonly", lambda sql: RESULT)
+
+
+def ask(generate):
+    return service.answer_question(QUESTION, generate, date(2026, 10, 19))
+
+
+def test_grounded_answer_is_used(patched):
+    text = "South had the highest revenue at 300, ahead of North at 270 and West at 240."
+    out = ask(lambda prompt: text)
+    assert out["answer_source"] == "llm"
+    assert out["answer"] == text
+
+
+def test_invented_number_falls_back(patched):
+    out = ask(lambda prompt: "Revenue in the South was 999.")
+    assert out["answer_source"] == "fallback"
+    assert "North" in out["answer"]
+
+
+def test_empty_result_never_calls_llm(patched, monkeypatch):
+    monkeypatch.setattr(service, "run_readonly",
+                        lambda sql: {"columns": ["revenue"], "rows": [], "truncated": False})
+
+    def fail(prompt):
+        raise AssertionError("LLM must not be called for an empty result")
+
+    out = ask(fail)
+    assert out["answer"] == "The query returned no rows."
+    assert out["answer_source"] == "fallback"
+
+
+def test_truncated_result_adds_note(patched, monkeypatch):
+    monkeypatch.setattr(service, "run_readonly", lambda sql: {**RESULT, "truncated": True})
+    out = ask(lambda prompt: "South was highest at 300.")
+    assert out["truncated"] is True
+    assert "truncated" in out["answer"].lower()
+
+
+@pytest.mark.parametrize("answer, value", [
+    ("Total was 1,380.00.", 1380),
+    ("Total was 1380", 1380.0),
+])
+def test_number_formats_match(answer, value):
+    assert is_grounded(answer, "total?", [[value]])
+
+
+def test_question_numbers_are_allowed():
+    assert is_grounded("In 2026 revenue was 300.", QUESTION, [[300.0]])
+
+
+def test_derived_number_is_rejected():
+    assert not is_grounded("Revenue is up 42%.", QUESTION, [[300.0]])
+
+
+def test_fallback_answer_for_empty_result():
+    assert fallback_answer(["a"], []) == "The query returned no rows."
+
+
+class SequenceLLM:
+    def __init__(self, replies):
+        self.replies = list(replies)
+
+    def generate(self, prompt):
+        return LLMResult(text=self.replies.pop(0), input_tokens=1, output_tokens=1)
+
+
+SEPTEMBER_SQL = (
+    "SELECT SUM(amount) AS revenue FROM orders WHERE status = 'completed' "
+    "AND order_date >= '2026-09-01' AND order_date < '2026-10-01'"
+)
+
+
+@pytest.fixture(autouse=True)
+def clear_overrides():
+    yield
+    app.dependency_overrides.clear()
+
+
+@pytest.mark.integration
+def test_endpoint_returns_grounded_answer():
+    llm = SequenceLLM([SEPTEMBER_SQL, "September revenue was 810."])
+    app.dependency_overrides[get_llm] = lambda: llm
+    r = client.post("/ask", json={"message": "What was revenue in September 2026?"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["rows"] == [[810.0]]
+    assert body["answer"] == "September revenue was 810."
+    assert body["answer_source"] == "llm"
+
+
+@pytest.mark.integration
+def test_endpoint_falls_back_on_invented_number():
+    llm = SequenceLLM([SEPTEMBER_SQL, "September revenue was 1,000."])
+    app.dependency_overrides[get_llm] = lambda: llm
+    r = client.post("/ask", json={"message": "What was revenue in September 2026?"})
+    assert r.status_code == 200
+    assert r.json()["answer_source"] == "fallback"
+    assert "810" in r.json()["answer"]
