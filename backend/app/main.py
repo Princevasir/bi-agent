@@ -17,6 +17,8 @@ from app.bi.schema import get_schema
 from datetime import date
 
 from app.bi.text_to_sql import generate_sql
+from app.bi.service import answer_question
+from app.bi.sql_guard import SQLRejected
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -121,3 +123,14 @@ def schema():
 def ask_sql(body: ChatRequest, request: Request, llm: LLMService = Depends(get_llm)):
     sql = generate_sql(body.message, make_generate(llm, request), date.today())
     return {"question": body.message, "sql": sql}
+
+
+@app.exception_handler(SQLRejected)
+async def sql_rejected_handler(request: Request, exc: SQLRejected):
+    logger.warning("request_id=%s sql_rejected=%s", getattr(request.state, "request_id", "-"), exc)
+    return JSONResponse(status_code=422, content={"detail": "The generated query was rejected."})
+
+
+@app.post("/ask")
+def ask(body: ChatRequest, request: Request, llm: LLMService = Depends(get_llm)):
+    return answer_question(body.message, make_generate(llm, request), date.today())
