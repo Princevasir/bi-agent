@@ -19,7 +19,7 @@ services:
       LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-20}
       LLM_MAX_OUTPUT_TOKENS: ${LLM_MAX_OUTPUT_TOKENS:-512}
       LLM_TOKEN_BUDGET: ${LLM_TOKEN_BUDGET:-50000}
-      DATABASE_URL: postgresql://bi_readonly:readonly_dev_pw@db:5433/analytics
+      DATABASE_URL: postgresql://bi_readonly:readonly_dev_pw@db:5432/analytics
   frontend:
     build: ./frontend
     ports:

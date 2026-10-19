@@ -12,6 +12,7 @@ from app.llm.base import (
     LLMConfigError, LLMError, LLMRateLimitError, LLMService, LLMTimeoutError,
 )
 from app.llm.budget import TokenBudget
+from app.db import DBError, DBTimeoutError, run_readonly
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -81,3 +82,19 @@ def chat(body: ChatRequest, request: Request,
     logger.info("request_id=%s llm_tokens in=%s out=%s", request.state.request_id,
                 result.input_tokens, result.output_tokens)
     return ChatResponse(reply=result.text)
+
+
+@app.get("/db/ping")
+def db_ping():
+    return run_readonly("SELECT 1 AS result")
+
+
+@app.exception_handler(DBError)
+async def db_error_handler(request: Request, exc: DBError):
+    if isinstance(exc, DBTimeoutError):
+        status, message = 504, "The database query timed out."
+    else:
+        status, message = 503, "The database is unavailable."
+    logger.warning("request_id=%s db_error=%s detail=%s",
+                   getattr(request.state, "request_id", "-"), type(exc).__name__, exc)
+    return JSONResponse(status_code=status, content={"detail": message})
