@@ -14,6 +14,9 @@ from app.llm.base import (
 from app.llm.budget import TokenBudget
 from app.db import DBError, DBTimeoutError, run_readonly
 from app.bi.schema import get_schema
+from datetime import date
+
+from app.bi.text_to_sql import generate_sql
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -31,6 +34,16 @@ LLM_ERRORS = [
     (LLMConfigError, 503, "The language model is not configured correctly."),
     (LLMError, 502, "The language model request failed."),
 ]
+
+def make_generate(llm, request):
+    def generate(prompt: str) -> str:
+        budget.check()
+        result = llm.generate(prompt)
+        budget.record(result.input_tokens + result.output_tokens)
+        logger.info("request_id=%s llm_tokens in=%s out=%s",
+                    request.state.request_id, result.input_tokens, result.output_tokens)
+        return result.text
+    return generate
 
 
 @app.middleware("http")
@@ -103,3 +116,8 @@ async def db_error_handler(request: Request, exc: DBError):
 @app.get("/schema")
 def schema():
     return get_schema()
+
+@app.post("/ask/sql")
+def ask_sql(body: ChatRequest, request: Request, llm: LLMService = Depends(get_llm)):
+    sql = generate_sql(body.message, make_generate(llm, request), date.today())
+    return {"question": body.message, "sql": sql}
