@@ -1,0 +1,101 @@
+import uuid
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app.bi.conversation import ConversationStore, Turn
+from app.llm import get_llm
+from app.main import app
+from routed_llm import RoutedLLM
+
+client = TestClient(app)
+
+SEPTEMBER = (
+    "SELECT r.name AS region, SUM(o.amount) AS revenue FROM orders o "
+    "JOIN regions r ON o.region_id = r.id WHERE o.status = 'completed' "
+    "AND o.order_date >= '2026-09-01' AND o.order_date < '2026-10-01' GROUP BY r.name"
+)
+
+
+def turn(n):
+    return Turn(question=f"q{n}", sql="SELECT 1", columns=["a"], rows=[[n]], answer=f"a{n}")
+
+
+def test_add_and_get():
+    store = ConversationStore()
+    cid = store.new_id()
+    store.add(cid, turn(1))
+    assert [t.question for t in store.get(cid)] == ["q1"]
+
+
+def test_unknown_id_returns_none():
+    assert ConversationStore().get("nope") is None
+
+
+def test_turns_are_capped():
+    store = ConversationStore(max_turns=3)
+    for n in range(5):
+        store.add("c", turn(n))
+    assert [t.question for t in store.get("c")] == ["q2", "q3", "q4"]
+
+
+def test_oldest_conversation_is_evicted():
+    store = ConversationStore(max_conversations=2)
+    store.add("a", turn(1))
+    store.add("b", turn(2))
+    store.add("c", turn(3))
+    assert store.get("a") is None
+    assert store.get("b") and store.get("c")
+
+
+@pytest.fixture(autouse=True)
+def clear_overrides():
+    yield
+    app.dependency_overrides.clear()
+
+
+def use(llm):
+    app.dependency_overrides[get_llm] = lambda: llm
+
+
+def ask(message, conversation_id=None):
+    return client.post("/ask", json={"message": message, "conversation_id": conversation_id})
+
+
+@pytest.mark.integration
+def test_first_question_creates_a_conversation():
+    use(RoutedLLM(SEPTEMBER))
+    r = ask("Revenue by region in September 2026?")
+    assert r.status_code == 200
+    cid = r.json()["conversation_id"]
+    uuid.UUID(cid)
+    turns = client.get(f"/conversations/{cid}").json()["turns"]
+    assert [t["question"] for t in turns] == ["Revenue by region in September 2026?"]
+
+
+@pytest.mark.integration
+def test_second_question_joins_the_same_conversation():
+    use(RoutedLLM(SEPTEMBER))
+    cid = ask("first question").json()["conversation_id"]
+    second = ask("second question", cid)
+    assert second.status_code == 200
+    assert second.json()["conversation_id"] == cid
+    assert len(client.get(f"/conversations/{cid}").json()["turns"]) == 2
+
+
+@pytest.mark.integration
+def test_unknown_conversation_is_404():
+    use(RoutedLLM(SEPTEMBER))
+    r = ask("hello", str(uuid.uuid4()))
+    assert r.status_code == 404
+    assert r.json() == {"detail": "Conversation not found."}
+
+
+@pytest.mark.integration
+def test_invalid_conversation_id_is_422():
+    use(RoutedLLM(SEPTEMBER))
+    assert ask("hello", "not-a-uuid").status_code == 422
+
+
+def test_get_unknown_conversation_is_404():
+    assert client.get(f"/conversations/{uuid.uuid4()}").status_code == 404

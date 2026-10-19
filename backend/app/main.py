@@ -20,6 +20,13 @@ from app.bi.text_to_sql import generate_sql
 from app.bi.service import answer_question
 from app.bi.sql_guard import SQLRejected
 
+from dataclasses import asdict
+from uuid import UUID
+
+from fastapi import HTTPException
+
+from app.bi.conversation import MAX_STORED_ROWS, ConversationStore, Turn
+
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
     format="%(asctime)s %(levelname)s %(message)s",
@@ -74,6 +81,12 @@ class ChatRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
     message: str = Field(min_length=1, max_length=2000)
 
+
+store = ConversationStore()
+
+
+class AskRequest(ChatRequest):
+    conversation_id: UUID | None = None
 
 class ChatResponse(BaseModel):
     reply: str
@@ -132,5 +145,27 @@ async def sql_rejected_handler(request: Request, exc: SQLRejected):
 
 
 @app.post("/ask")
-def ask(body: ChatRequest, request: Request, llm: LLMService = Depends(get_llm)):
-    return answer_question(body.message, make_generate(llm, request), date.today())
+def ask(body: AskRequest, request: Request, llm: LLMService = Depends(get_llm)):
+    if body.conversation_id is None:
+        cid = store.new_id()
+    else:
+        cid = str(body.conversation_id)
+        if store.get(cid) is None:
+            raise HTTPException(status_code=404, detail="Conversation not found.")
+    out = answer_question(body.message, make_generate(llm, request), date.today())
+    store.add(cid, Turn(
+        question=body.message,
+        sql=out["sql"],
+        columns=out["columns"],
+        rows=out["rows"][:MAX_STORED_ROWS],
+        answer=out["answer"],
+    ))
+    return {**out, "conversation_id": cid}
+
+
+@app.get("/conversations/{conversation_id}")
+def get_conversation(conversation_id: UUID):
+    turns = store.get(str(conversation_id))
+    if turns is None:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+    return {"conversation_id": str(conversation_id), "turns": [asdict(t) for t in turns]}
