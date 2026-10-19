@@ -9,6 +9,8 @@ from app.llm import get_llm
 from app.llm.base import LLMResult
 from app.main import app
 
+from app.bi.sql_guard import SQLRejected
+
 client = TestClient(app)
 
 QUESTION = "What was revenue by region in September 2026?"
@@ -81,6 +83,17 @@ def test_derived_number_is_rejected():
 
 def test_fallback_answer_for_empty_result():
     assert fallback_answer(["a"], []) == "The query returned no rows."
+
+
+def test_rejected_sql_propagates_and_never_executes(monkeypatch):
+    monkeypatch.setattr(service, "generate_sql", lambda q, g, t: "DROP TABLE orders")
+
+    def fail(sql):
+        raise AssertionError("must not execute rejected SQL")
+
+    monkeypatch.setattr(service, "run_readonly", fail)
+    with pytest.raises(SQLRejected):
+        ask(lambda prompt: "")
 
 
 class SequenceLLM:
