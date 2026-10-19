@@ -16,6 +16,8 @@ SEPTEMBER = (
     "AND o.order_date >= '2026-09-01' AND o.order_date < '2026-10-01' GROUP BY r.name"
 )
 
+AUGUST = SEPTEMBER.replace("2026-09-01", "2026-08-01").replace("2026-10-01", "2026-09-01")
+
 
 def turn(n):
     return Turn(question=f"q{n}", sql="SELECT 1", columns=["a"], rows=[[n]], answer=f"a{n}")
@@ -97,5 +99,31 @@ def test_invalid_conversation_id_is_422():
     assert ask("hello", "not-a-uuid").status_code == 422
 
 
+@pytest.mark.integration
 def test_get_unknown_conversation_is_404():
     assert client.get(f"/conversations/{uuid.uuid4()}").status_code == 404
+
+
+@pytest.mark.integration
+def test_first_turn_never_calls_rewrite():
+    llm = RoutedLLM(SEPTEMBER)
+    use(llm)
+    ask("Revenue by region in September 2026?")
+    assert not any(p.startswith("Rewrite") for p in llm.prompts)
+
+
+@pytest.mark.integration
+def test_follow_up_is_rewritten_and_answered():
+    use(RoutedLLM(SEPTEMBER))
+    cid = ask("What was revenue by region in September 2026?").json()["conversation_id"]
+    standalone = "What was revenue by region in August 2026?"
+    llm = RoutedLLM(AUGUST, rewrite=standalone)
+    use(llm)
+    r = ask("What about August?", cid)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["interpreted_as"] == standalone
+    assert sorted(body["rows"]) == [["North", 250.0], ["South", 200.0], ["West", 120.0]]
+    rewrite_prompts = [p for p in llm.prompts if p.startswith("Rewrite")]
+    assert len(rewrite_prompts) == 1
+    assert "September 2026" in rewrite_prompts[0]

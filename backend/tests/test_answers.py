@@ -10,6 +10,7 @@ from app.llm.base import LLMResult
 from app.main import app
 
 from app.bi.sql_guard import SQLRejected
+from app.bi.conversation import Turn
 
 client = TestClient(app)
 
@@ -94,6 +95,16 @@ def test_rejected_sql_propagates_and_never_executes(monkeypatch):
     monkeypatch.setattr(service, "run_readonly", fail)
     with pytest.raises(SQLRejected):
         ask(lambda prompt: "")
+
+
+def test_blank_rewrite_falls_back_to_original_question(monkeypatch):
+    seen = []
+    monkeypatch.setattr(service, "generate_sql", lambda q, g, t: seen.append(q) or SQL)
+    monkeypatch.setattr(service, "run_readonly", lambda sql: RESULT)
+    history = [Turn("first", "SELECT 1", [], [], "a")]
+    out = service.answer_question("What about August?", lambda p: "", date(2026, 10, 19), history)
+    assert seen == ["What about August?"]
+    assert out["interpreted_as"] == "What about August?"
 
 
 class SequenceLLM:

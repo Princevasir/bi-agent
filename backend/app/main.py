@@ -147,12 +147,13 @@ async def sql_rejected_handler(request: Request, exc: SQLRejected):
 @app.post("/ask")
 def ask(body: AskRequest, request: Request, llm: LLMService = Depends(get_llm)):
     if body.conversation_id is None:
-        cid = store.new_id()
+        cid, history = store.new_id(), []
     else:
         cid = str(body.conversation_id)
-        if store.get(cid) is None:
+        history = store.get(cid)
+        if history is None:
             raise HTTPException(status_code=404, detail="Conversation not found.")
-    out = answer_question(body.message, make_generate(llm, request), date.today())
+    out = answer_question(body.message, make_generate(llm, request), date.today(), history)
     store.add(cid, Turn(
         question=body.message,
         sql=out["sql"],
