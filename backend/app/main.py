@@ -2,33 +2,28 @@ import logging
 import os
 import time
 import uuid
+from dataclasses import asdict
+from datetime import date
+from uuid import UUID
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.access import AccessError
+from app.appdb import User, get_user
+from app.auth import AuthConfigError, authenticate, create_token, current_user
+from app.bi.conversation import MAX_STORED_ROWS, ConversationStore, Turn
+from app.bi.schema import get_schema
+from app.bi.service import answer_question
+from app.bi.sql_guard import SQLRejected
+from app.bi.text_to_sql import generate_sql
+from app.db import DBError, DBTimeoutError, run_readonly
 from app.llm import get_llm
 from app.llm.base import (
     LLMConfigError, LLMError, LLMRateLimitError, LLMService, LLMTimeoutError,
 )
 from app.llm.budget import TokenBudget
-from app.db import DBError, DBTimeoutError, run_readonly
-from app.bi.schema import get_schema
-from datetime import date
-
-from app.bi.text_to_sql import generate_sql
-from app.bi.service import answer_question
-from app.bi.sql_guard import SQLRejected
-
-from dataclasses import asdict
-from uuid import UUID
-
-from fastapi import HTTPException
-
-from app.bi.conversation import MAX_STORED_ROWS, ConversationStore, Turn
-
-from app.appdb import get_user
-from app.auth import AuthConfigError, authenticate, create_token, current_user
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -38,6 +33,7 @@ logger = logging.getLogger("bi_agent")
 
 app = FastAPI(title="BI Agent API")
 budget = TokenBudget(int(os.getenv("LLM_TOKEN_BUDGET", "50000")))
+store = ConversationStore()
 
 # Most specific first; LLMError is the catch-all.
 LLM_ERRORS = [
@@ -46,16 +42,6 @@ LLM_ERRORS = [
     (LLMConfigError, 503, "The language model is not configured correctly."),
     (LLMError, 502, "The language model request failed."),
 ]
-
-def make_generate(llm, request):
-    def generate(prompt: str) -> str:
-        budget.check()
-        result = llm.generate(prompt)
-        budget.record(result.input_tokens + result.output_tokens)
-        logger.info("request_id=%s llm_tokens in=%s out=%s",
-                    request.state.request_id, result.input_tokens, result.output_tokens)
-        return result.text
-    return generate
 
 
 @app.middleware("http")
@@ -71,33 +57,82 @@ async def add_request_id(request: Request, call_next):
     return response
 
 
+def _rid(request: Request):
+    return getattr(request.state, "request_id", "-")
+
+
 @app.exception_handler(LLMError)
 async def llm_error_handler(request: Request, exc: LLMError):
     for cls, status, message in LLM_ERRORS:
         if isinstance(exc, cls):
             logger.warning("request_id=%s llm_error=%s detail=%s",
-                           getattr(request.state, "request_id", "-"), type(exc).__name__, exc)
+                           _rid(request), type(exc).__name__, exc)
             return JSONResponse(status_code=status, content={"detail": message})
 
 
-class LoginRequest(BaseModel):
-    username: str = Field(min_length=1, max_length=100)
-    password: str = Field(min_length=1, max_length=200)
+@app.exception_handler(DBError)
+async def db_error_handler(request: Request, exc: DBError):
+    if isinstance(exc, DBTimeoutError):
+        status, message = 504, "The database query timed out."
+    else:
+        status, message = 503, "The database is unavailable."
+    logger.warning("request_id=%s db_error=%s detail=%s cause=%r",
+                   _rid(request), type(exc).__name__, exc, exc.__cause__)
+    return JSONResponse(status_code=status, content={"detail": message})
+
+
+@app.exception_handler(SQLRejected)
+async def sql_rejected_handler(request: Request, exc: SQLRejected):
+    logger.warning("request_id=%s sql_rejected=%s", _rid(request), exc)
+    return JSONResponse(status_code=422, content={"detail": "The generated query was rejected."})
+
+
+@app.exception_handler(AuthConfigError)
+async def auth_config_handler(request: Request, exc: AuthConfigError):
+    logger.error("request_id=%s auth_config_error=%s", _rid(request), exc)
+    return JSONResponse(status_code=503, content={"detail": "Authentication is not configured."})
+
+
+@app.exception_handler(AccessError)
+async def access_error_handler(request: Request, exc: AccessError):
+    logger.warning("request_id=%s access_denied=%s", _rid(request), exc)
+    return JSONResponse(status_code=403, content={"detail": "Access denied."})
+
 
 class ChatRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
     message: str = Field(min_length=1, max_length=2000)
 
 
-store = ConversationStore()
+class ChatResponse(BaseModel):
+    reply: str
 
 
 class AskRequest(ChatRequest):
     conversation_id: UUID | None = None
 
-class ChatResponse(BaseModel):
-    reply: str
 
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=100)
+    password: str = Field(min_length=1, max_length=200)
+
+
+def make_generate(llm, request):
+    def generate(prompt: str) -> str:
+        budget.check()
+        result = llm.generate(prompt)
+        budget.record(result.input_tokens + result.output_tokens)
+        logger.info("request_id=%s llm_tokens in=%s out=%s",
+                    request.state.request_id, result.input_tokens, result.output_tokens)
+        return result.text
+    return generate
+
+
+def conv_key(user, conversation_id):
+    return f"{user.username}:{conversation_id}"
+
+
+# ---- public routes ----
 
 @app.get("/health")
 def health() -> dict[str, str]:
@@ -109,59 +144,56 @@ def hello() -> dict[str, str]:
     return {"message": "Hello, BI Agent!"}
 
 
-@app.post("/chat", dependencies=[Depends(current_user)], response_model=ChatResponse)
+@app.post("/auth/login")
+def login(body: LoginRequest):
+    user = get_user(body.username)
+    if not authenticate(user, body.password):
+        raise HTTPException(status_code=401, detail="Invalid username or password.")
+    return {"access_token": create_token(user.username, user.role),
+            "token_type": "bearer", "role": user.role}
+
+
+# ---- protected routes ----
+
+@app.post("/chat", response_model=ChatResponse, dependencies=[Depends(current_user)])
 def chat(body: ChatRequest, request: Request,
          llm: LLMService = Depends(get_llm)) -> ChatResponse:
-    budget.check()
-    result = llm.generate(body.message)
-    budget.record(result.input_tokens + result.output_tokens)
-    logger.info("request_id=%s llm_tokens in=%s out=%s", request.state.request_id,
-                result.input_tokens, result.output_tokens)
-    return ChatResponse(reply=result.text)
+    result_text = make_generate(llm, request)(body.message)
+    return ChatResponse(reply=result_text)
 
 
-@app.get("/db/ping", dependencies=[Depends(current_user)])
-def db_ping():
-    return run_readonly("SELECT 1 AS result")
+@app.get("/db/ping")
+def db_ping(user: User = Depends(current_user)):
+    return run_readonly("SELECT 1 AS result", role=user.role)
 
 
-@app.exception_handler(DBError)
-async def db_error_handler(request: Request, exc: DBError):
-    if isinstance(exc, DBTimeoutError):
-        status, message = 504, "The database query timed out."
-    else:
-        status, message = 503, "The database is unavailable."
-    logger.warning("request_id=%s db_error=%s detail=%s",
-                   getattr(request.state, "request_id", "-"), type(exc).__name__, exc)
-    return JSONResponse(status_code=status, content={"detail": message})
+@app.get("/schema")
+def schema(user: User = Depends(current_user)):
+    return get_schema(user.role)
 
-@app.get("/schema", dependencies=[Depends(current_user)])
-def schema():
-    return get_schema()
 
-@app.post("/ask/sql", dependencies=[Depends(current_user)])
-def ask_sql(body: ChatRequest, request: Request, llm: LLMService = Depends(get_llm)):
-    sql = generate_sql(body.message, make_generate(llm, request), date.today())
+@app.post("/ask/sql")
+def ask_sql(body: ChatRequest, request: Request,
+            user: User = Depends(current_user),
+            llm: LLMService = Depends(get_llm)):
+    sql = generate_sql(body.message, make_generate(llm, request), date.today(), role=user.role)
     return {"question": body.message, "sql": sql}
 
 
-@app.exception_handler(SQLRejected)
-async def sql_rejected_handler(request: Request, exc: SQLRejected):
-    logger.warning("request_id=%s sql_rejected=%s", getattr(request.state, "request_id", "-"), exc)
-    return JSONResponse(status_code=422, content={"detail": "The generated query was rejected."})
-
-
-@app.post("/ask", dependencies=[Depends(current_user)])
-def ask(body: AskRequest, request: Request, llm: LLMService = Depends(get_llm)):
+@app.post("/ask")
+def ask(body: AskRequest, request: Request,
+        user: User = Depends(current_user),
+        llm: LLMService = Depends(get_llm)):
     if body.conversation_id is None:
         cid, history = store.new_id(), []
     else:
         cid = str(body.conversation_id)
-        history = store.get(cid)
+        history = store.get(conv_key(user, cid))
         if history is None:
             raise HTTPException(status_code=404, detail="Conversation not found.")
-    out = answer_question(body.message, make_generate(llm, request), date.today(), history)
-    store.add(cid, Turn(
+    out = answer_question(body.message, make_generate(llm, request),
+                          date.today(), history, role=user.role)
+    store.add(conv_key(user, cid), Turn(
         question=body.message,
         sql=out["sql"],
         columns=out["columns"],
@@ -171,24 +203,10 @@ def ask(body: AskRequest, request: Request, llm: LLMService = Depends(get_llm)):
     return {**out, "conversation_id": cid}
 
 
-@app.get("/conversations/{conversation_id}", dependencies=[Depends(current_user)])
-def get_conversation(conversation_id: UUID):
-    turns = store.get(str(conversation_id))
+@app.get("/conversations/{conversation_id}")
+def get_conversation(conversation_id: UUID, user: User = Depends(current_user)):
+    cid = str(conversation_id)
+    turns = store.get(conv_key(user, cid))
     if turns is None:
         raise HTTPException(status_code=404, detail="Conversation not found.")
-    return {"conversation_id": str(conversation_id), "turns": [asdict(t) for t in turns]}
-
-
-@app.exception_handler(AuthConfigError)
-async def auth_config_handler(request: Request, exc: AuthConfigError):
-    logger.error("auth_config_error=%s", exc)
-    return JSONResponse(status_code=503, content={"detail": "Authentication is not configured."})
-
-
-@app.post("/auth/login")
-def login(body: LoginRequest):
-    user = get_user(body.username)
-    if not authenticate(user, body.password):
-        raise HTTPException(status_code=401, detail="Invalid username or password.")
-    return {"access_token": create_token(user.username, user.role),
-            "token_type": "bearer", "role": user.role}
+    return {"conversation_id": cid, "turns": [asdict(t) for t in turns]}

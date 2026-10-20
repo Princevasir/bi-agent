@@ -23,6 +23,7 @@ services:
       APP_DATABASE_URL: postgresql://app_rw:app_dev_pw@db:5432/appdb
       JWT_SECRET: ${JWT_SECRET:-}
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-60}
+      DATABASE_URL_LIMITED: postgresql://bi_limited:limited_dev_pw@db:5432/analytics
   frontend:
     build: ./frontend
     ports:

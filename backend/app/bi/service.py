@@ -3,12 +3,13 @@ from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
+from app.access import tables_for
+from app.bi.chart import build_chart_spec
 from app.bi.grounding import answer_prompt, fallback_answer, is_grounded
 from app.bi.rewrite import rewrite_prompt
 from app.bi.sql_guard import validate_sql
 from app.bi.text_to_sql import generate_sql
 from app.db import run_readonly
-from app.bi.chart import build_chart_spec
 
 MAX_QUESTION_CHARS = 500
 
@@ -16,6 +17,7 @@ MAX_QUESTION_CHARS = 500
 class State(TypedDict, total=False):
     question: str
     today: date
+    role: str
     history: list
     standalone: str
     sql: str
@@ -25,6 +27,7 @@ class State(TypedDict, total=False):
     draft: str
     answer: str
     answer_source: str
+
 
 def has_data(rows):
     if not rows:
@@ -42,13 +45,13 @@ def build_graph(generate):
 
     def write_sql(state):
         question = state.get("standalone") or state["question"]
-        return {"sql": generate_sql(question, generate, state["today"])}
+        return {"sql": generate_sql(question, generate, state["today"], role=state["role"])}
 
     def check_sql(state):
-        return {"sql": validate_sql(state["sql"])}
+        return {"sql": validate_sql(state["sql"], tables_for(state["role"]))}
 
     def execute(state):
-        return run_readonly(state["sql"])
+        return run_readonly(state["sql"], role=state["role"])
 
     def no_rows(state):
         text = "The query returned no rows." if not state["rows"] else "No matching data was found."
@@ -92,15 +95,17 @@ def build_graph(generate):
     g.add_edge("rewrite", "write_sql")
     g.add_edge("write_sql", "check_sql")
     g.add_edge("check_sql", "execute")
-    g.add_conditional_edges("execute", after_execute, {"explain": "explain", "no_rows": "no_rows"})
+    g.add_conditional_edges(
+        "execute", after_execute, {"explain": "explain", "no_rows": "no_rows"}
+    )
     g.add_edge("explain", "ground")
     g.add_edge("ground", END)
     g.add_edge("no_rows", END)
     return g.compile()
 
 
-def answer_question(question, generate, today, history=None):
-    state = {"question": question, "today": today, "history": history or []}
+def answer_question(question, generate, today, history=None, role="analyst"):
+    state = {"question": question, "today": today, "history": history or [], "role": role}
     out = build_graph(generate).invoke(state)
     return {
         "question": question,

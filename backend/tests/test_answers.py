@@ -26,8 +26,8 @@ RESULT = {
 
 @pytest.fixture
 def patched(monkeypatch):
-    monkeypatch.setattr(service, "generate_sql", lambda q, g, t: SQL)
-    monkeypatch.setattr(service, "run_readonly", lambda sql: RESULT)
+    monkeypatch.setattr(service, "generate_sql", lambda q, g, t, **kw: SQL)
+    monkeypatch.setattr(service, "run_readonly", lambda sql, **kw: RESULT)
 
 
 def ask(generate):
@@ -49,7 +49,7 @@ def test_invented_number_falls_back(patched):
 
 def test_empty_result_never_calls_llm(patched, monkeypatch):
     monkeypatch.setattr(service, "run_readonly",
-                        lambda sql: {"columns": ["revenue"], "rows": [], "truncated": False})
+                        lambda sql, **kw: {"columns": ["revenue"], "rows": [], "truncated": False})
 
     def fail(prompt):
         raise AssertionError("LLM must not be called for an empty result")
@@ -60,7 +60,7 @@ def test_empty_result_never_calls_llm(patched, monkeypatch):
 
 
 def test_truncated_result_adds_note(patched, monkeypatch):
-    monkeypatch.setattr(service, "run_readonly", lambda sql: {**RESULT, "truncated": True})
+    monkeypatch.setattr(service, "run_readonly", lambda sql, **kw: {**RESULT, "truncated": True})
     out = ask(lambda prompt: "South was highest at 300.")
     assert out["truncated"] is True
     assert "truncated" in out["answer"].lower()
@@ -87,7 +87,7 @@ def test_fallback_answer_for_empty_result():
 
 
 def test_single_null_row_is_treated_as_no_data(patched, monkeypatch):
-    monkeypatch.setattr(service, "run_readonly", lambda sql: {
+    monkeypatch.setattr(service, "run_readonly", lambda sql, **kw: {
         "columns": ["revenue", "order_count"], "rows": [[None, 0]], "truncated": False})
 
     def fail(prompt):
@@ -99,16 +99,16 @@ def test_single_null_row_is_treated_as_no_data(patched, monkeypatch):
 
 
 def test_null_in_a_multi_row_result_is_still_explained(patched, monkeypatch):
-    monkeypatch.setattr(service, "run_readonly", lambda sql: {
+    monkeypatch.setattr(service, "run_readonly", lambda sql, **kw: {
         "columns": ["region", "revenue"], "rows": [["North", None], ["South", 5.0]], "truncated": False})
     out = ask(lambda prompt: "South was 5.")
     assert out["answer_source"] == "llm"
 
 
 def test_rejected_sql_propagates_and_never_executes(monkeypatch):
-    monkeypatch.setattr(service, "generate_sql", lambda q, g, t: "DROP TABLE orders")
+    monkeypatch.setattr(service, "generate_sql", lambda q, g, t, **kw: "DROP TABLE orders")
 
-    def fail(sql):
+    def fail(sql, **kw):
         raise AssertionError("must not execute rejected SQL")
 
     monkeypatch.setattr(service, "run_readonly", fail)
@@ -118,8 +118,8 @@ def test_rejected_sql_propagates_and_never_executes(monkeypatch):
 
 def test_blank_rewrite_falls_back_to_original_question(monkeypatch):
     seen = []
-    monkeypatch.setattr(service, "generate_sql", lambda q, g, t: seen.append(q) or SQL)
-    monkeypatch.setattr(service, "run_readonly", lambda sql: RESULT)
+    monkeypatch.setattr(service, "generate_sql", lambda q, g, t, **kw: seen.append(q) or SQL)
+    monkeypatch.setattr(service, "run_readonly", lambda sql, **kw: RESULT)
     history = [Turn("first", "SELECT 1", [], [], "a")]
     out = service.answer_question("What about August?", lambda p: "", date(2026, 10, 19), history)
     assert seen == ["What about August?"]

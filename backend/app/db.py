@@ -5,6 +5,8 @@ from decimal import Decimal
 import psycopg
 from psycopg import errors
 
+from app.access import db_env_for
+
 
 class DBError(Exception):
     """Database failure."""
@@ -22,8 +24,8 @@ def _json_safe(v):
     return v
 
 
-def run_readonly(sql, params=None, max_rows=200, timeout_ms=5000):
-    url = os.getenv("DATABASE_URL")
+def run_readonly(sql, params=None, max_rows=200, timeout_ms=5000, role="analyst"):
+    url = os.getenv(db_env_for(role))
     if not url:
         raise DBError("DATABASE_URL is not set.")
     try:

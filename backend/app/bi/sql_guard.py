@@ -11,7 +11,7 @@ class SQLRejected(Exception):
     pass
 
 
-def validate_sql(sql: str) -> str:
+def validate_sql(sql: str, allowed_tables = ALLOWED_TABLES) -> str:
     try:
         statements = [s for s in sqlglot.parse(sql, read="postgres") if s is not None]
     except SqlglotError as e:
@@ -29,7 +29,7 @@ def validate_sql(sql: str) -> str:
             continue
         if t.db or t.catalog:
             raise SQLRejected("Schema-qualified tables are not allowed.")
-        if t.name.lower() not in ALLOWED_TABLES:
+        if t.name.lower() not in allowed_tables:
             raise SQLRejected(f"Table not permitted: {t.name}")
     for f in tree.find_all(exp.Anonymous):
         if f.name.lower().startswith(BLOCKED_PREFIXES):

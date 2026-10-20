@@ -7,6 +7,8 @@ from app.bi.conversation import ConversationStore, Turn
 from app.llm import get_llm
 from app.main import app
 from routed_llm import RoutedLLM
+from app.appdb import User
+from app.auth import current_user
 
 client = TestClient(app)
 
@@ -150,3 +152,23 @@ def test_single_value_result_has_no_chart():
     assert r.status_code == 200
     assert r.json()["rows"] == [[810.0]]
     assert r.json()["chart"] is None
+
+
+def as_user(name):
+    app.dependency_overrides[current_user] = lambda: User(username=name, role="analyst")
+
+
+@pytest.mark.integration
+def test_conversation_is_private_to_its_owner():
+    use(RoutedLLM(SEPTEMBER))
+    as_user("alice")
+    cid = ask("first question").json()["conversation_id"]
+    assert client.get(f"/conversations/{cid}").status_code == 200
+
+    as_user("bob")
+    assert client.get(f"/conversations/{cid}").status_code == 404
+    assert ask("second question", cid).status_code == 404
+
+    as_user("alice")
+    turns = client.get(f"/conversations/{cid}").json()["turns"]
+    assert len(turns) == 1  # bob's attempt added nothing
