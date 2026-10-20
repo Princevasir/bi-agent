@@ -127,3 +127,26 @@ def test_follow_up_is_rewritten_and_answered():
     rewrite_prompts = [p for p in llm.prompts if p.startswith("Rewrite")]
     assert len(rewrite_prompts) == 1
     assert "September 2026" in rewrite_prompts[0]
+
+
+@pytest.mark.integration
+def test_ask_response_includes_a_bar_chart_spec():
+    use(RoutedLLM(SEPTEMBER))
+    r = ask("What was revenue by region in September 2026?")
+    assert r.status_code == 200
+    assert r.json()["chart"] == {"type": "bar", "x": "region", "y": "revenue"}
+
+
+TOTAL = (
+    "SELECT SUM(amount) AS revenue FROM orders WHERE status = 'completed' "
+    "AND order_date >= '2026-09-01' AND order_date < '2026-10-01'"
+)
+
+
+@pytest.mark.integration
+def test_single_value_result_has_no_chart():
+    use(RoutedLLM(TOTAL, answer="September revenue was 810."))
+    r = ask("What was revenue in September 2026?")
+    assert r.status_code == 200
+    assert r.json()["rows"] == [[810.0]]
+    assert r.json()["chart"] is None

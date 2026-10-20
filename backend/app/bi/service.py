@@ -8,6 +8,7 @@ from app.bi.rewrite import rewrite_prompt
 from app.bi.sql_guard import validate_sql
 from app.bi.text_to_sql import generate_sql
 from app.db import run_readonly
+from app.bi.chart import build_chart_spec
 
 MAX_QUESTION_CHARS = 500
 
@@ -110,4 +111,5 @@ def answer_question(question, generate, today, history=None):
         "truncated": out["truncated"],
         "answer": out["answer"],
         "answer_source": out["answer_source"],
+        "chart": build_chart_spec(out["columns"], out["rows"]),
     }
