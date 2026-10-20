@@ -20,6 +20,9 @@ services:
       LLM_MAX_OUTPUT_TOKENS: ${LLM_MAX_OUTPUT_TOKENS:-512}
       LLM_TOKEN_BUDGET: ${LLM_TOKEN_BUDGET:-50000}
       DATABASE_URL: postgresql://bi_readonly:readonly_dev_pw@db:5432/analytics
+      APP_DATABASE_URL: postgresql://app_rw:app_dev_pw@db:5432/appdb
+      JWT_SECRET: ${JWT_SECRET:-}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-60}
   frontend:
     build: ./frontend
     ports:

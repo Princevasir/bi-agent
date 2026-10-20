@@ -4,3 +4,5 @@ httpx>=0.27
 psycopg[binary]>=3.2
 sqlglot>=25
 langgraph>=0.2
+argon2-cffi>=23
+PyJWT>=2.8

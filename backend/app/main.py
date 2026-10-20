@@ -27,6 +27,9 @@ from fastapi import HTTPException
 
 from app.bi.conversation import MAX_STORED_ROWS, ConversationStore, Turn
 
+from app.appdb import get_user
+from app.auth import AuthConfigError, authenticate, create_token, current_user
+
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
     format="%(asctime)s %(levelname)s %(message)s",
@@ -77,6 +80,10 @@ async def llm_error_handler(request: Request, exc: LLMError):
             return JSONResponse(status_code=status, content={"detail": message})
 
 
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=100)
+    password: str = Field(min_length=1, max_length=200)
+
 class ChatRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
     message: str = Field(min_length=1, max_length=2000)
@@ -102,7 +109,7 @@ def hello() -> dict[str, str]:
     return {"message": "Hello, BI Agent!"}
 
 
-@app.post("/chat", response_model=ChatResponse)
+@app.post("/chat", dependencies=[Depends(current_user)], response_model=ChatResponse)
 def chat(body: ChatRequest, request: Request,
          llm: LLMService = Depends(get_llm)) -> ChatResponse:
     budget.check()
@@ -113,7 +120,7 @@ def chat(body: ChatRequest, request: Request,
     return ChatResponse(reply=result.text)
 
 
-@app.get("/db/ping")
+@app.get("/db/ping", dependencies=[Depends(current_user)])
 def db_ping():
     return run_readonly("SELECT 1 AS result")
 
@@ -128,11 +135,11 @@ async def db_error_handler(request: Request, exc: DBError):
                    getattr(request.state, "request_id", "-"), type(exc).__name__, exc)
     return JSONResponse(status_code=status, content={"detail": message})
 
-@app.get("/schema")
+@app.get("/schema", dependencies=[Depends(current_user)])
 def schema():
     return get_schema()
 
-@app.post("/ask/sql")
+@app.post("/ask/sql", dependencies=[Depends(current_user)])
 def ask_sql(body: ChatRequest, request: Request, llm: LLMService = Depends(get_llm)):
     sql = generate_sql(body.message, make_generate(llm, request), date.today())
     return {"question": body.message, "sql": sql}
@@ -144,7 +151,7 @@ async def sql_rejected_handler(request: Request, exc: SQLRejected):
     return JSONResponse(status_code=422, content={"detail": "The generated query was rejected."})
 
 
-@app.post("/ask")
+@app.post("/ask", dependencies=[Depends(current_user)])
 def ask(body: AskRequest, request: Request, llm: LLMService = Depends(get_llm)):
     if body.conversation_id is None:
         cid, history = store.new_id(), []
@@ -164,9 +171,24 @@ def ask(body: AskRequest, request: Request, llm: LLMService = Depends(get_llm)):
     return {**out, "conversation_id": cid}
 
 
-@app.get("/conversations/{conversation_id}")
+@app.get("/conversations/{conversation_id}", dependencies=[Depends(current_user)])
 def get_conversation(conversation_id: UUID):
     turns = store.get(str(conversation_id))
     if turns is None:
         raise HTTPException(status_code=404, detail="Conversation not found.")
     return {"conversation_id": str(conversation_id), "turns": [asdict(t) for t in turns]}
+
+
+@app.exception_handler(AuthConfigError)
+async def auth_config_handler(request: Request, exc: AuthConfigError):
+    logger.error("auth_config_error=%s", exc)
+    return JSONResponse(status_code=503, content={"detail": "Authentication is not configured."})
+
+
+@app.post("/auth/login")
+def login(body: LoginRequest):
+    user = get_user(body.username)
+    if not authenticate(user, body.password):
+        raise HTTPException(status_code=401, detail="Invalid username or password.")
+    return {"access_token": create_token(user.username, user.role),
+            "token_type": "bearer", "role": user.role}
