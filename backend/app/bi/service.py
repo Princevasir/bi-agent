@@ -25,6 +25,11 @@ class State(TypedDict, total=False):
     answer: str
     answer_source: str
 
+def has_data(rows):
+    if not rows:
+        return False
+    return not (len(rows) == 1 and any(v is None for v in rows[0]))
+
 
 def build_graph(generate):
     def rewrite(state):
@@ -45,7 +50,8 @@ def build_graph(generate):
         return run_readonly(state["sql"])
 
     def no_rows(state):
-        return {"answer": "The query returned no rows.", "answer_source": "fallback"}
+        text = "The query returned no rows." if not state["rows"] else "No matching data was found."
+        return {"answer": text, "answer_source": "fallback"}
 
     def explain(state):
         question = state.get("standalone") or state["question"]
@@ -71,7 +77,7 @@ def build_graph(generate):
         return "rewrite" if state.get("history") else "write_sql"
 
     def after_execute(state):
-        return "explain" if state["rows"] else "no_rows"
+        return "explain" if has_data(state["rows"]) else "no_rows"
 
     g = StateGraph(State)
     g.add_node("rewrite", rewrite)

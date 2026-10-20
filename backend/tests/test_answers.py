@@ -86,6 +86,25 @@ def test_fallback_answer_for_empty_result():
     assert fallback_answer(["a"], []) == "The query returned no rows."
 
 
+def test_single_null_row_is_treated_as_no_data(patched, monkeypatch):
+    monkeypatch.setattr(service, "run_readonly", lambda sql: {
+        "columns": ["revenue", "order_count"], "rows": [[None, 0]], "truncated": False})
+
+    def fail(prompt):
+        raise AssertionError("LLM must not be called when the result has no data")
+
+    out = ask(fail)
+    assert out["answer"] == "No matching data was found."
+    assert out["answer_source"] == "fallback"
+
+
+def test_null_in_a_multi_row_result_is_still_explained(patched, monkeypatch):
+    monkeypatch.setattr(service, "run_readonly", lambda sql: {
+        "columns": ["region", "revenue"], "rows": [["North", None], ["South", 5.0]], "truncated": False})
+    out = ask(lambda prompt: "South was 5.")
+    assert out["answer_source"] == "llm"
+
+
 def test_rejected_sql_propagates_and_never_executes(monkeypatch):
     monkeypatch.setattr(service, "generate_sql", lambda q, g, t: "DROP TABLE orders")
 
