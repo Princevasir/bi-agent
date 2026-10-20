@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 
 from client import BackendError, post_json
 
@@ -15,12 +16,26 @@ with st.sidebar:
         st.rerun()
 
 
+def render_chart(spec, df):
+    if not spec or spec.get("x") not in df.columns or spec.get("y") not in df.columns:
+        return
+    series = df.set_index(spec["x"])[spec["y"]]
+    if spec["type"] == "line":
+        st.line_chart(series)
+    elif spec["type"] == "bar":
+        st.bar_chart(series)
+
+
 def show(msg):
     st.write(msg["answer"])
     if msg.get("interpreted_as") and msg["interpreted_as"] != msg["question"]:
         st.caption(f"Interpreted as: {msg['interpreted_as']}")
     with st.expander("SQL"):
         st.code(msg["sql"], language="sql")
+    if msg["rows"]:
+        df = pd.DataFrame(msg["rows"], columns=msg["columns"])
+        st.dataframe(df, hide_index=True)
+        render_chart(msg.get("chart"), df)
 
 
 def ask(question):
