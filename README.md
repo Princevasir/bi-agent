@@ -107,7 +107,7 @@ All routes except the first three need `Authorization: Bearer <token>` from `/au
 | GET | `/db/ping` | Database check as your role |
 | POST | `/chat` | Plain LLM reply (no data access) |
 
-Errors return a generic `{"detail": ...}`: 401 not signed in, 403 access denied, 404 conversation not found, 422 query rejected, 429 LLM rate limit, 502/503/504 for LLM or database problems. Details go to the server log, tagged with the request ID.
+Errors return a generic `{"detail": ...}`: 401 not signed in, 403 access denied, 404 conversation not found, 422 query rejected, 429 too many sign-in attempts or LLM rate limit, 502/503/504 for LLM or database problems. Details go to the server log, tagged with the request ID.
 
 ## Configuration
 
@@ -177,10 +177,11 @@ docker-compose.yml
 - **Changes to `db/init/` have no effect:** those scripts run only on an empty volume. Apply a script to the running database with `docker compose exec -T db psql -U admin -d postgres < db/init/<file>.sql`, or reset everything with `docker compose down -v` (this deletes all users and data).
 - **"Authentication is not configured":** `JWT_SECRET` is missing or shorter than 32 characters.
 - **"The generated query was rejected":** the model's SQL broke a rule (wrong table, not a single SELECT), or your role may not see that data.
+- **"Too many sign-in attempts":** five wrong passwords within 15 minutes lock that username for 15 minutes. During development, `docker compose restart backend` clears it.
 - **"Not authenticated" in the UI:** your session ended; sign in again. A page refresh also signs you out.
 
 ## Status and limits
 
 Milestones 1 to 22 are done: the core question flow, follow-ups, charts, sign-in and roles. Next are audit logging and monitoring, an evaluation dataset, production images, AWS deployment and CI/CD. See `docs/build-plan.html` for details.
 
-Known limits today: conversations and the token budget are kept in memory and reset on restart; there is no login rate limiting yet; there is no TLS outside AWS; greetings such as "hello" still trigger a guessed query; and result rows are sent to the model provider to write the explanation, so check its data policy before using real business data.
+Known limits today: conversations and the token budget are kept in memory and reset on restart; there is no TLS outside AWS; greetings such as "hello" still trigger a guessed query; and result rows are sent to the model provider to write the explanation, so check its data policy before using real business data.

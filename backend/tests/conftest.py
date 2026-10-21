@@ -15,6 +15,8 @@ from app.appdb import User  # noqa: E402
 from app.auth import current_user  # noqa: E402
 from app.main import app  # noqa: E402
 from app import audit  # noqa: E402
+from app import main as main_module  # noqa: E402
+from app.throttle import LoginThrottle  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -28,3 +30,8 @@ def audit_events(monkeypatch):
     events = []
     monkeypatch.setattr(audit, "_write", events.append)
     return events
+
+
+@pytest.fixture(autouse=True)
+def fresh_login_throttle(monkeypatch):
+    monkeypatch.setattr(main_module, "throttle", LoginThrottle())

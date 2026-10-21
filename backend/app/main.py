@@ -25,6 +25,7 @@ from app.llm.base import (
     LLMConfigError, LLMError, LLMRateLimitError, LLMService, LLMTimeoutError,
 )
 from app.llm.budget import TokenBudget
+from app.throttle import LoginThrottle
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -35,6 +36,7 @@ logger = logging.getLogger("bi_agent")
 app = FastAPI(title="BI Agent API")
 budget = TokenBudget(int(os.getenv("LLM_TOKEN_BUDGET", "50000")))
 store = ConversationStore()
+throttle = LoginThrottle()
 
 # Most specific first; LLMError is the catch-all.
 LLM_ERRORS = [
@@ -169,10 +171,15 @@ def hello() -> dict[str, str]:
 @app.post("/auth/login")
 def login(body: LoginRequest, request: Request):
     name = body.username.strip().lower()
+    if throttle.is_locked(name):
+        audit_event(request, "login_locked", 429, username=name)
+        raise HTTPException(status_code=429, detail="Too many sign-in attempts. Try again later.")
     user = get_user(name)
     if not authenticate(user, body.password):
+        throttle.record_failure(name)
         audit_event(request, "login_failure", 401, username=name)
         raise HTTPException(status_code=401, detail="Invalid username or password.")
+    throttle.record_success(name)
     request.state.user = user
     audit_event(request, "login_success", 200)
     return {"access_token": create_token(user.username, user.role),
