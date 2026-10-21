@@ -1,0 +1,1459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BI Agent MVP: incremental build plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f2f5f7;--surface:#fff;--ink:#14202b;--muted:#566574;--line:#b9c5cd;--acc:#0e7c86;--acc-t:#d6eef0;--amb:#b97a0f;--amb-t:#f8ecd2;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1820;--surface:#172430;--ink:#e6edf2;--muted:#9bacb9;--line:#34475a;--acc:#4fc3cd;--acc-t:#143b40;--amb:#e3a73f;--amb-t:#3b2f12;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0f1820;--surface:#172430;--ink:#e6edf2;--muted:#9bacb9;--line:#34475a;--acc:#4fc3cd;--acc-t:#143b40;--amb:#e3a73f;--amb-t:#3b2f12;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:980px;margin:0 auto;padding:32px 20px 64px}
+h1,h2,h3{font-family:"Bricolage Grotesque",system-ui,sans-serif;line-height:1.15;margin:0}
+h1{font-size:clamp(2rem,5vw,3.1rem);max-width:18ch}
+h2{font-size:1.6rem;margin:56px 0 8px}
+h3{font-size:1.05rem;margin-bottom:6px}
+p{max-width:68ch;margin:8px 0}
+.lede{color:var(--muted);font-size:1.1rem}
+.loop,.flow{display:flex;flex-wrap:wrap;gap:8px;list-style:none;padding:0;margin:18px 0}
+.loop li,.flow li{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 12px;font-size:.92rem}
+.loop li:last-child{border-style:dashed}
+.flow li.llm{background:var(--amb-t);border-color:var(--amb)}
+.flow li.det{background:var(--acc-t);border-color:var(--acc)}
+.key{font-size:.88rem;color:var(--muted)}
+.explorer{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;margin-top:14px}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.tabs button{font:inherit;font-size:.88rem;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px 11px;cursor:pointer}
+.tabs button[aria-pressed="true"]{background:var(--acc);border-color:var(--acc);color:#fff}
+button:focus-visible{outline:3px solid var(--amb);outline-offset:2px}
+.svgwrap{overflow-x:auto}
+svg{min-width:700px;width:100%;height:auto;display:block}
+svg text{fill:var(--ink);font:12px system-ui,sans-serif}
+svg .sub{fill:var(--muted);font-size:10.5px}
+.n rect{fill:var(--surface);stroke:var(--line);stroke-width:1.5}
+.n.new rect{fill:var(--acc-t);stroke:var(--acc);stroke-width:2}
+.n.llm rect{stroke:var(--amb)}
+.e{stroke:var(--line);stroke-width:1.6;fill:none}
+.e.new{stroke:var(--acc);stroke-width:2.2}
+.ghost{opacity:.16}
+.ghost rect{stroke-dasharray:4 3}
+.band rect{fill:none;stroke:var(--line);stroke-dasharray:6 4}
+.cap{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-top:12px;font-size:.93rem}
+.cap p{margin:2px 0}
+.cap b{font-weight:600}
+.phases{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:16px;margin-top:18px}
+.ph{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px}
+.ph ol{margin:8px 0 10px;padding-left:0;list-style:none;font-size:.93rem}
+.ph li{padding:3px 0 3px 40px;position:relative}
+.ph li b{position:absolute;left:0;color:var(--acc);font-weight:600}
+.gate{font-size:.87rem;color:var(--muted);border-top:1px solid var(--line);padding-top:8px;margin:0}
+.rules{columns:2 300px;column-gap:28px;padding-left:20px}
+.rules li{margin-bottom:6px;break-inside:avoid}
+pre{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;overflow-x:auto;font-size:.86rem;line-height:1.5}
+code{font-family:ui-monospace,Menlo,Consolas,monospace}
+details{background:var(--surface);border:1px solid var(--line);border-radius:8px;margin:10px 0;padding:0 14px}
+summary{cursor:pointer;padding:12px 0;font-weight:600}
+summary:focus-visible{outline:3px solid var(--amb);outline-offset:2px}
+details[open] summary{border-bottom:1px solid var(--line);margin-bottom:10px}
+.step{padding-bottom:10px;font-size:.95rem}
+.step pre{margin:8px 0}
+</style>
+</head>
+<body>
+<main>
+<h1>BI Agent MVP: build it in verified steps</h1>
+<p class="lede">27 small milestones, from a Hello World API to a deployed natural-language BI agent. Each one is run, tested, committed, and approved before the next begins.</p>
+
+<h2>The loop every milestone follows</h2>
+<ol class="loop">
+<li>Plan</li><li>Implement</li><li>Run</li><li>Test</li><li>Verify</li><li>Save a Git checkpoint</li><li>Wait for your approval, then extend</li>
+</ol>
+<p>Test results are only reported as passed once you have shared the real output. Anything else is labelled "expected".</p>
+
+<h2>How the architecture grows</h2>
+<p>Pick a stage. Highlighted boxes are new at that stage, faded dashed boxes do not exist yet.</p>
+<div class="explorer">
+<div class="tabs" id="tabs" role="group" aria-label="Architecture stage"></div>
+<div class="svgwrap">
+<svg viewBox="0 0 900 460" role="img" aria-label="Architecture diagram that adds components at each stage">
+<g id="edges">
+<path class="e" data-s="1" d="M160 213H195"/>
+<path class="e" data-s="2" d="M345 200L400 106"/>
+<path class="e" data-s="2" d="M540 93L770 93"/>
+<path class="e" data-s="3" d="M345 226L400 346"/>
+<path class="e" data-s="3" d="M540 353H770"/>
+<path class="e" data-s="4" d="M345 213H380"/>
+<path class="e" data-s="4" d="M540 205L575 177"/>
+<path class="e" data-s="4" d="M575 165L540 105"/>
+<path class="e" data-s="4" d="M655 76V92"/>
+<path class="e" data-s="4" d="M655 138V154"/>
+<path class="e" data-s="4" d="M655 200V216"/>
+<path class="e" data-s="4" d="M735 115L770 148"/>
+<path class="e" data-s="4" d="M575 250L540 340"/>
+<path class="e" data-s="5" d="M460 236V258"/>
+<path class="e" data-s="5" d="M540 225L575 295"/>
+<path class="e" data-s="6" d="M270 116V190"/>
+<path class="e" data-s="6" d="M270 236V310"/>
+</g>
+<g id="nodes">
+<g class="n" data-s="0" id="ui"><rect x="20" y="190" width="140" height="46" rx="6"/><text x="90" y="211" text-anchor="middle" class="lab">curl / pytest</text><text x="90" y="226" text-anchor="middle" class="sub">caller</text></g>
+<g class="n" data-s="0"><rect x="195" y="190" width="150" height="46" rx="6"/><text x="270" y="211" text-anchor="middle">FastAPI backend</text><text x="270" y="226" text-anchor="middle" class="sub">/health, /hello</text></g>
+<g class="n" data-s="2" data-llm="1"><rect x="380" y="70" width="160" height="46" rx="6"/><text x="460" y="91" text-anchor="middle">LLM service</text><text x="460" y="106" text-anchor="middle" class="sub">interface + timeouts</text></g>
+<g class="n llm" data-s="2"><rect x="770" y="70" width="120" height="46" rx="6"/><text x="830" y="91" text-anchor="middle">OpenRouter</text><text x="830" y="106" text-anchor="middle" class="sub">Qwen2.5 Coder 32B</text></g>
+<g class="n" data-s="4" id="orch"><rect x="380" y="190" width="160" height="46" rx="6"/><text x="460" y="211" text-anchor="middle" class="lab">Query workflow</text><text x="460" y="226" text-anchor="middle" class="sub">plain Python first</text></g>
+<g class="n" data-s="5"><rect x="380" y="258" width="160" height="46" rx="6"/><text x="460" y="279" text-anchor="middle">Conversation state</text><text x="460" y="294" text-anchor="middle" class="sub">analytical context</text></g>
+<g class="n" data-s="3"><rect x="380" y="330" width="160" height="46" rx="6"/><text x="460" y="351" text-anchor="middle">Query executor</text><text x="460" y="366" text-anchor="middle" class="sub">read-only, row limits</text></g>
+<g class="n" data-s="3"><rect x="770" y="330" width="120" height="46" rx="6"/><text x="830" y="351" text-anchor="middle">Analytical DB</text><text x="830" y="366" text-anchor="middle" class="sub">sample data first</text></g>
+<g class="n" data-s="4"><rect x="575" y="30" width="160" height="46" rx="6"/><text x="655" y="51" text-anchor="middle">Metric registry</text><text x="655" y="66" text-anchor="middle" class="sub">governed definitions</text></g>
+<g class="n" data-s="4"><rect x="575" y="92" width="160" height="46" rx="6"/><text x="655" y="113" text-anchor="middle">Metadata retrieval</text><text x="655" y="128" text-anchor="middle" class="sub">schema, columns</text></g>
+<g class="n llm" data-s="4"><rect x="575" y="154" width="160" height="46" rx="6"/><text x="655" y="175" text-anchor="middle">SQL generator</text><text x="655" y="190" text-anchor="middle" class="sub">LLM, fixed schema</text></g>
+<g class="n" data-s="4"><rect x="575" y="216" width="160" height="46" rx="6"/><text x="655" y="237" text-anchor="middle">SQL validator + authz</text><text x="655" y="252" text-anchor="middle" class="sub">SQLGlot, deterministic</text></g>
+<g class="n" data-s="5"><rect x="575" y="278" width="160" height="46" rx="6"/><text x="655" y="299" text-anchor="middle">Chart spec</text><text x="655" y="314" text-anchor="middle" class="sub">structured JSON only</text></g>
+<g class="n" data-s="4"><rect x="770" y="148" width="120" height="46" rx="6"/><text x="830" y="169" text-anchor="middle">PostgreSQL</text><text x="830" y="184" text-anchor="middle" class="sub">metadata store</text></g>
+<g class="n" data-s="6"><rect x="195" y="70" width="150" height="46" rx="6"/><text x="270" y="91" text-anchor="middle">Auth + RBAC</text><text x="270" y="106" text-anchor="middle" class="sub">roles, permissions</text></g>
+<g class="n" data-s="6"><rect x="195" y="310" width="150" height="46" rx="6"/><text x="270" y="331" text-anchor="middle">Audit + monitoring</text><text x="270" y="346" text-anchor="middle" class="sub">logs, correlation IDs</text></g>
+</g>
+<g class="n band" data-s="6" id="band"><rect x="20" y="400" width="870" height="44" rx="8" style="fill:var(--acc-t);stroke:var(--acc)"/><text x="455" y="419" text-anchor="middle">Docker image on ECS/Fargate</text><text x="455" y="434" text-anchor="middle" class="sub">Terraform infrastructure, GitHub Actions CI/CD, smoke tests, rollback</text></g>
+</svg>
+</div>
+<div class="cap" id="cap"></div>
+<p class="key">Amber outline: calls an LLM. Teal highlight: added at this stage. Everything the LLM produces passes through deterministic code before it touches data.</p>
+</div>
+
+<h2>The text-to-SQL request path (milestones 15 to 17)</h2>
+<p>This is the part that needs the most care. The model proposes, deterministic code decides.</p>
+<ol class="flow">
+<li class="det">Question arrives</li>
+<li class="det">Resolve permitted tables and metrics</li>
+<li class="llm">LLM drafts SQL</li>
+<li class="det">Parse and validate with SQLGlot</li>
+<li class="det">Enforce role permissions</li>
+<li class="det">Run read-only with limits</li>
+<li class="det">Check the result</li>
+<li class="llm">LLM writes a grounded answer</li>
+</ol>
+<p class="key">Teal steps are deterministic code. Amber steps use the LLM. A rejected query stops at step 4 or 5 and never reaches the database.</p>
+
+<h2>Roadmap</h2>
+<div class="phases">
+<section class="ph"><h3>Phase 0: Foundation</h3><ol>
+<li><b>M1</b>Verify Python, Git, Docker; initialize the project</li>
+<li><b>M2</b>FastAPI with /health and /hello, in a venv</li>
+<li><b>M3</b>pytest suite and first Git checkpoint</li>
+<li><b>M3b</b>Containerize the backend with Docker Compose</li></ol>
+<p class="gate">Gate: endpoints respond correctly, tests pass in the venv, and the same API runs healthy in a container.</p></section>
+<section class="ph"><h3>Phase 1: Minimal application</h3><ol>
+<li><b>M4</b>Minimal Streamlit page</li>
+<li><b>M5</b>Frontend calls backend, with loading and error states</li>
+<li><b>M6</b>Environment config, logging, correlation IDs</li></ol>
+<p class="gate">Gate: the UI shows the backend response; Streamlit calls the API only, with no database access.</p></section>
+<section class="ph"><h3>Phase 2: LLM integration</h3><ol>
+<li><b>M7</b>LLM service interface</li>
+<li><b>M8</b>One working LLM request</li>
+<li><b>M9</b>Failures, timeouts, cost limits</li></ol>
+<p class="gate">Gate: missing credentials, provider errors, and timeouts are handled.</p></section>
+<section class="ph"><h3>Phase 3: Data access</h3><ol>
+<li><b>M10</b>Local sample database and seed data</li>
+<li><b>M11</b>Connectivity and deterministic queries</li>
+<li><b>M12</b>Read-only execution and limits</li></ol>
+<p class="gate">Gate: a known aggregation matches the expected number; writes are refused.</p></section>
+<section class="ph"><h3>Phase 4: BI foundations</h3><ol>
+<li><b>M13</b>Minimal metric registry</li>
+<li><b>M14</b>Schema and metadata retrieval</li>
+<li><b>M15</b>First natural-language-to-SQL flow</li>
+<li><b>M16</b>SQL parsing, validation, authorization</li>
+<li><b>M17</b>Result validation, grounded answers</li></ol>
+<p class="gate">Gate: a golden question set passes, and unsafe SQL is rejected.</p></section>
+<section class="ph"><h3>Phase 5: Conversational BI</h3><ol>
+<li><b>M18</b>LangGraph, only if the working flow justifies it</li>
+<li><b>M19</b>Conversation history and analytical state</li>
+<li><b>M20</b>Follow-up questions and context</li>
+<li><b>M21</b>Tables and basic charts</li></ol>
+<p class="gate">Gate: follow-ups resolve correctly; charts render from a structured spec, never model code.</p></section>
+<section class="ph"><h3>Phase 6: Production readiness</h3><ol>
+<li><b>M22</b>Authentication and RBAC</li>
+<li><b>M23</b>Audit logging and monitoring</li>
+<li><b>M24</b>Regression and evaluation dataset</li>
+<li><b>M25</b>Production image hardening (multi-stage, scanning)</li>
+<li><b>M26</b>AWS deployment</li>
+<li><b>M27</b>CI/CD, smoke tests, rollback</li></ol>
+<p class="gate">Gate: a deployed build passes smoke tests and can be rolled back.</p></section>
+</div>
+<p><b>Frontend decision:</b> Streamlit replaces Next.js, so no Node.js is needed. It stays a thin client that calls the FastAPI backend over HTTP, which keeps it replaceable if you later need a custom UI or richer authentication.</p>
+<p>Phase 7 (RAG, multiple sources, dashboards, root cause analysis, forecasting) waits until the core is reliable.</p>
+
+<h2>Rules that do not bend</h2>
+<ul class="rules">
+<li>One milestone at a time, then stop for approval.</li>
+<li>Never extend a broken baseline.</li>
+<li>Every capability gets tests; rerun earlier tests after each change.</li>
+<li>No invented test results.</li>
+<li>Add a dependency only when its milestone needs it.</li>
+<li>No generated SQL runs without validation and database-level access controls.</li>
+<li>The LLM never enforces authorization.</li>
+<li>Secrets stay out of source code.</li>
+<li>Diagnose from real error output before changing code.</li>
+<li>Material architecture changes are explained and approved first.</li>
+</ul>
+
+<h2>Step-by-step guide: Phases 0 and 1</h2>
+<p><b>Decision:</b> develop with a venv and Docker Compose from the first milestone. The venv gives a fast edit-and-test loop and editor support. Docker Compose is the canonical way to run the app, so it behaves the same on Windows, macOS, and Linux. This pulls Docker forward from M25, so I added M3b. A milestone passes only when its tests pass in the venv and the Compose stack runs. Nothing below is verified yet. Share your real output at each gate.</p>
+<p class="key">On Windows PowerShell, activate with <code>.venv\Scripts\Activate.ps1</code>, use <code>python</code> if <code>python3</code> is missing, and open URLs in a browser instead of using curl.</p>
+
+<details><summary>M1: Environment check and repository</summary><div class="step">
+<p><b>Adds:</b> an empty Git repo with a .gitignore. <b>Not yet:</b> any application code.</p>
+<p>Run the checks from the next section, then:</p>
+<pre><code>mkdir bi-agent &amp;&amp; cd bi-agent
+git init
+echo "# BI Agent" &gt; README.md</code></pre>
+<p>Create <code>.gitignore</code> containing these four lines: <code>.venv/</code>, <code>__pycache__/</code>, <code>.pytest_cache/</code>, <code>.env</code>.</p>
+<pre><code>git add .
+git commit -m "chore: initialize repository"</code></pre>
+<p><b>Expect:</b> versions print, hello-world greets you, one commit exists (<code>git log --oneline</code>). <b>Gate:</b> all of that, with a Python version you will reuse as the Docker base image.</p></div></details>
+
+<details><summary>M2: FastAPI Hello World in a venv</summary><div class="step">
+<p><b>Adds:</b> <code>backend/</code> with two endpoints. <b>Not yet:</b> tests, Docker.</p>
+<pre><code>mkdir -p backend/app &amp;&amp; cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install fastapi "uvicorn[standard]"</code></pre>
+<p><code>backend/requirements.txt</code> (top-level packages only; ranges keep it portable):</p>
+<pre><code>fastapi&gt;=0.110,&lt;1
+uvicorn[standard]&gt;=0.29,&lt;1</code></pre>
+<p>Create an empty <code>backend/app/__init__.py</code> and <code>backend/app/main.py</code>:</p>
+<pre><code>from fastapi import FastAPI
+
+app = FastAPI(title="BI Agent API")
+
+
+@app.get("/health")
+def health() -&gt; dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/hello")
+def hello() -&gt; dict[str, str]:
+    return {"message": "Hello, BI Agent!"}</code></pre>
+<pre><code>uvicorn app.main:app --reload --port 8000   # leave running</code></pre>
+<p><b>Expect:</b> <code>/health</code> returns <code>{"status":"ok"}</code>, <code>/hello</code> returns <code>{"message":"Hello, BI Agent!"}</code>, and <code>/docs</code> opens the API page. A <code>ModuleNotFoundError</code> for <code>app</code> means you ran uvicorn from the wrong directory (it must be <code>backend/</code>).</p>
+<pre><code>git add . &amp;&amp; git commit -m "feat: add health and hello endpoints"</code></pre></div></details>
+
+<details><summary>M3: Automated tests and checkpoint</summary><div class="step">
+<p><b>Adds:</b> pytest and httpx (needed by FastAPI's TestClient). <b>Not yet:</b> Docker.</p>
+<p><code>backend/requirements-dev.txt</code>:</p>
+<pre><code>-r requirements.txt
+pytest&gt;=8
+httpx&gt;=0.27</code></pre>
+<p><code>backend/pytest.ini</code> (lets tests import <code>app</code>):</p>
+<pre><code>[pytest]
+pythonpath = .
+testpaths = tests</code></pre>
+<p><code>backend/tests/test_api.py</code>:</p>
+<pre><code>from fastapi.testclient import TestClient
+
+from app.main import app
+
+client = TestClient(app)
+
+
+def test_health():
+    r = client.get("/health")
+    assert r.status_code == 200
+    assert r.json() == {"status": "ok"}
+
+
+def test_hello():
+    r = client.get("/hello")
+    assert r.status_code == 200
+    assert r.json() == {"message": "Hello, BI Agent!"}
+
+
+def test_unknown_route_returns_404():
+    assert client.get("/nope").status_code == 404</code></pre>
+<pre><code>pip install -r requirements-dev.txt
+pytest</code></pre>
+<p><b>Expect:</b> <code>3 passed</code>. <b>Gate:</b> that line, from your terminal. Then commit: <code>feat: add backend tests</code>.</p></div></details>
+
+<details><summary>M3b: Containerize the backend</summary><div class="step">
+<p><b>Adds:</b> a Dockerfile and Compose file. <b>Not yet:</b> the frontend. Use the same Python major.minor as your venv (the example assumes 3.12).</p>
+<p><code>backend/Dockerfile</code>:</p>
+<pre><code>FROM python:3.12-slim
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY app ./app
+RUN useradd --create-home appuser
+USER appuser
+EXPOSE 8000
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]</code></pre>
+<p><code>backend/.dockerignore</code>: <code>.venv</code>, <code>__pycache__</code>, <code>.pytest_cache</code>, <code>tests</code> (one per line).</p>
+<p><code>docker-compose.yml</code> in the repo root:</p>
+<pre><code>services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5</code></pre>
+<pre><code>docker compose up --build   # from the repo root; leave running
+docker compose ps           # in a second terminal</code></pre>
+<p><b>Expect:</b> <code>/health</code> works on port 8000 and <code>docker compose ps</code> shows <code>healthy</code> after a few seconds. Stop the venv uvicorn first if port 8000 is busy. <b>Gate:</b> healthy container, M3 tests still pass in the venv. Commit: <code>feat: containerize backend</code>.</p></div></details>
+
+<details><summary>M4: Minimal Streamlit page</summary><div class="step">
+<p><b>Adds:</b> a <code>frontend/</code> service in Compose. <b>Not yet:</b> any backend call.</p>
+<p><code>frontend/requirements.txt</code>: <code>streamlit&gt;=1.35</code> and <code>requests&gt;=2.31</code>. <code>frontend/app.py</code>:</p>
+<pre><code>import streamlit as st
+
+st.title("BI Agent")
+st.caption("Frontend is running.")</code></pre>
+<p><code>frontend/Dockerfile</code> is the backend one with the last two lines replaced:</p>
+<pre><code>COPY app.py client.py ./
+EXPOSE 8501
+CMD ["streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.port=8501"]</code></pre>
+<p>(Create an empty <code>client.py</code> for now so the COPY works.) Add to <code>docker-compose.yml</code> under <code>services:</code>:</p>
+<pre><code>  frontend:
+    build: ./frontend
+    ports:
+      - "8501:8501"
+    depends_on:
+      backend:
+        condition: service_healthy</code></pre>
+<p><b>Expect:</b> <code>http://localhost:8501</code> shows the title and caption. <b>Gate:</b> page loads from Compose and backend tests still pass. Commit: <code>feat: add minimal Streamlit frontend</code>.</p></div></details>
+
+<details><summary>M5: Frontend calls the backend, with error handling</summary><div class="step">
+<p><b>Key lesson:</b> inside a container, <code>localhost</code> is the container itself. Compose service names are the hostnames, so the frontend reaches the API at <code>http://backend:8000</code>.</p>
+<p>Compose: add under <code>frontend:</code></p>
+<pre><code>    environment:
+      BACKEND_URL: http://backend:8000</code></pre>
+<p><code>frontend/client.py</code>:</p>
+<pre><code>import os
+
+import requests
+
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+
+
+class BackendError(Exception):
+    """The backend is unreachable or returned an error."""
+
+
+def get_json(path: str, timeout: float = 5.0) -&gt; dict:
+    try:
+        r = requests.get(f"{BACKEND_URL}{path}", timeout=timeout)
+        r.raise_for_status()
+        return r.json()
+    except requests.Timeout as e:
+        raise BackendError("The backend took too long to respond.") from e
+    except requests.ConnectionError as e:
+        raise BackendError("Cannot reach the backend. Is it running?") from e
+    except requests.HTTPError as e:
+        raise BackendError(f"Backend returned status {r.status_code}.") from e
+    except ValueError as e:
+        raise BackendError("Backend returned invalid JSON.") from e</code></pre>
+<p><code>frontend/app.py</code>:</p>
+<pre><code>import streamlit as st
+
+from client import BackendError, get_json
+
+st.title("BI Agent")
+
+if st.button("Call backend"):
+    with st.spinner("Calling backend..."):
+        try:
+            st.success(get_json("/hello")["message"])
+        except BackendError as e:
+            st.error(str(e))</code></pre>
+<p>Tests: in <code>frontend/</code> create its own venv, plus <code>requirements-dev.txt</code> (<code>-r requirements.txt</code>, <code>pytest&gt;=8</code>), the same <code>pytest.ini</code> as the backend, and <code>tests/test_client.py</code>:</p>
+<pre><code>import pytest
+import requests
+
+import client
+
+
+class FakeResponse:
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return {"message": "Hello, BI Agent!"}
+
+
+def test_get_json_success(monkeypatch):
+    monkeypatch.setattr(client.requests, "get", lambda *a, **k: FakeResponse())
+    assert client.get_json("/hello") == {"message": "Hello, BI Agent!"}
+
+
+def test_unreachable_backend(monkeypatch):
+    def boom(*a, **k):
+        raise requests.ConnectionError()
+
+    monkeypatch.setattr(client.requests, "get", boom)
+    with pytest.raises(client.BackendError):
+        client.get_json("/hello")</code></pre>
+<p><b>Manual tests:</b> (1) <code>docker compose up --build</code>, click the button: green "Hello, BI Agent!". (2) <code>docker compose stop backend</code>, click again: red "Cannot reach the backend" message, no stack trace. (3) <code>docker compose start backend</code> and retry: works again.</p>
+<p><b>Gate:</b> <code>2 passed</code> in <code>frontend/</code>, <code>3 passed</code> in <code>backend/</code>, and all three manual tests. Commit: <code>feat: connect frontend to backend with error handling</code>.</p></div></details>
+
+<details><summary>M6: Configuration, logging, and request correlation IDs</summary><div class="step">
+<p><b>Adds:</b> env-based log level and an <code>X-Request-ID</code> on every request, so one user action can be traced through frontend and backend logs. <b>Not yet:</b> any secrets or LLM settings.</p>
+<p>Replace the top of <code>backend/app/main.py</code> (keep the two endpoints as they are):</p>
+<pre><code>import logging
+import os
+import time
+import uuid
+
+from fastapi import FastAPI, Request
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s %(message)s",
+)
+logger = logging.getLogger("bi_agent")
+
+app = FastAPI(title="BI Agent API")
+
+
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    start = time.perf_counter()
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    ms = (time.perf_counter() - start) * 1000
+    logger.info("request_id=%s %s %s -&gt; %s %.1fms", request_id,
+                request.method, request.url.path, response.status_code, ms)
+    return response</code></pre>
+<p>In <code>frontend/client.py</code>, add <code>import uuid</code> and pass <code>headers={"X-Request-ID": str(uuid.uuid4())}</code> to <code>requests.get</code>. In Compose, add under <code>backend:</code> an <code>environment:</code> entry <code>LOG_LEVEL: ${LOG_LEVEL:-INFO}</code>. Create <code>.env.example</code> with <code>LOG_LEVEL=INFO</code>; real <code>.env</code> files stay git-ignored.</p>
+<p>New backend tests: a response without the header has a non-empty <code>X-Request-ID</code>, and a request sending <code>X-Request-ID: abc-123</code> gets the same value back.</p>
+<p><b>Expect:</b> all earlier tests still pass plus the new ones. <code>docker compose logs backend</code> shows lines with <code>request_id=...</code> (health checks add one every 10 seconds). After clicking the button, the same ID appears for that call. <b>Gate:</b> regression tests green, header echoed, log line observed. Commit: <code>feat: add config, logging, and request IDs</code>.</p></div></details>
+
+<p class="key">Development log: M1 to M15 are committed. M16 passed its gate in output you pasted (63 tests, and a real /ask result matching the seed). For M17 I saw a real /ask answer from the model whose numbers match the seed, but not its pytest result or the M16 and M17 commits. Reported by you, not seen: the /schema output after M14, the other M7 to M9 container checks, and the M10 psql checks. Phase 5 is next.</p>
+
+<h2>Step-by-step guide: Phase 2, LLM integration</h2>
+<p><b>Decision:</b> the app talks to the model only through a small <code>LLMService</code> interface. M7 builds it with a fake provider, so everything is testable with no credentials and no cost. M8 adds OpenRouter as the real provider, calling Qwen2.5 Coder 32B Instruct (slug <code>qwen/qwen-2.5-coder-32b-instruct</code>) through OpenRouter's OpenAI-compatible HTTP API. We call it with <code>httpx</code> directly instead of an SDK: one small dependency, and the timeouts are explicit. Nothing below is verified yet.</p>
+<p><b>Before M8 you need:</b> an OpenRouter account, a small credit balance, and an API key. When I checked, OpenRouter listed this model at about $0.66 per million input tokens and $1 per million output tokens, with roughly 33K tokens of context, hosted by a single provider. Prices and availability change, so confirm on the model page. With the 512 output-token cap used here, one maximum-size call costs roughly a tenth of a cent. A <code>:free</code> variant page also exists, but free variants are often rate-limited or withdrawn, so start with the paid slug. Keep the key only in your git-ignored <code>.env</code>. Prompts go to OpenRouter and the underlying provider, so check their data policy before you send real business data in later milestones.</p>
+
+<details><summary>M7: LLM service interface (no real model yet)</summary><div class="step">
+<p><b>Adds:</b> <code>backend/app/llm/</code>, a fake provider, and <code>POST /chat</code>. <b>Not yet:</b> an HTTP client, API keys, or frontend changes. No new dependencies.</p>
+<p><code>backend/app/llm/base.py</code>:</p>
+<pre><code>from dataclasses import dataclass
+from typing import Protocol
+
+
+class LLMError(Exception):
+    """Base class for LLM failures."""
+
+
+@dataclass(frozen=True)
+class LLMResult:
+    text: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+
+class LLMService(Protocol):
+    def generate(self, prompt: str) -&gt; LLMResult: ...</code></pre>
+<p><code>backend/app/llm/fake.py</code>:</p>
+<pre><code>from app.llm.base import LLMResult
+
+
+class FakeLLM:
+    def generate(self, prompt: str) -&gt; LLMResult:
+        words = len(prompt.split())
+        return LLMResult(text=f"Echo: {prompt}", input_tokens=words, output_tokens=words + 1)</code></pre>
+<p><code>backend/app/llm/__init__.py</code> (the factory; cached so a real client is built once):</p>
+<pre><code>import os
+from functools import lru_cache
+
+from app.llm.base import LLMService
+
+
+@lru_cache
+def get_llm() -&gt; LLMService:
+    provider = os.getenv("LLM_PROVIDER", "fake")
+    if provider == "fake":
+        from app.llm.fake import FakeLLM
+        return FakeLLM()
+    raise ValueError(f"Unknown LLM_PROVIDER: {provider}")</code></pre>
+<p>In <code>backend/app/main.py</code>, add these imports at the top, and the models and route below <code>/hello</code>:</p>
+<pre><code>from fastapi import Depends
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.llm import get_llm
+from app.llm.base import LLMService
+
+
+class ChatRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+    message: str = Field(min_length=1, max_length=2000)
+
+
+class ChatResponse(BaseModel):
+    reply: str
+
+
+@app.post("/chat", response_model=ChatResponse)
+def chat(body: ChatRequest, llm: LLMService = Depends(get_llm)) -&gt; ChatResponse:
+    return ChatResponse(reply=llm.generate(body.message).text)</code></pre>
+<p>Why <code>Depends</code>: tests can swap the provider without touching the route. Why the length cap: it is the first, cheapest cost control.</p>
+<p><code>backend/tests/test_chat.py</code>:</p>
+<pre><code>import pytest
+from fastapi.testclient import TestClient
+
+from app.llm import get_llm
+from app.llm.fake import FakeLLM
+from app.main import app
+
+client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def use_fake_llm():
+    app.dependency_overrides[get_llm] = lambda: FakeLLM()
+    yield
+    app.dependency_overrides.clear()
+
+
+def test_chat_returns_reply():
+    r = client.post("/chat", json={"message": "hello"})
+    assert r.status_code == 200
+    assert r.json() == {"reply": "Echo: hello"}
+
+
+def test_chat_rejects_blank_message():
+    assert client.post("/chat", json={"message": "   "}).status_code == 422
+
+
+def test_chat_rejects_too_long_message():
+    assert client.post("/chat", json={"message": "x" * 2001}).status_code == 422
+
+
+def test_chat_rejects_missing_field():
+    assert client.post("/chat", json={}).status_code == 422</code></pre>
+<p><b>Run:</b> <code>pytest</code> in <code>backend/</code>. Expect <code>9 passed</code> (5 earlier plus 4 new). Then <code>docker compose up --build -d</code> and open <code>http://localhost:8000/docs</code>, try <code>POST /chat</code> with <code>{"message": "hello"}</code>. Expect <code>{"reply": "Echo: hello"}</code>.</p>
+<p><b>Gate:</b> 9 passed, the manual call works in the container, frontend tests still pass. Commit: <code>feat: add LLM service interface with fake provider</code>.</p></div></details>
+
+<details><summary>M8: One working LLM request (OpenRouter, Qwen2.5 Coder 32B)</summary><div class="step">
+<p><b>Adds:</b> <code>OpenRouterLLM</code> and the settings it needs. <b>Not yet:</b> timeouts, error categories, or cost limits (M9), and no chat box in the UI until failures are handled.</p>
+<p>Add <code>httpx&gt;=0.27</code> to <code>backend/requirements.txt</code> (it is already in the dev file for tests, but the app now needs it at runtime), then run <code>pip install -r requirements-dev.txt</code> in the backend venv.</p>
+<p><code>backend/app/llm/openrouter.py</code>:</p>
+<pre><code>import httpx
+
+from app.llm.base import LLMError, LLMResult
+
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+
+class OpenRouterLLM:
+    def __init__(self, api_key, model, max_tokens=512, client=None):
+        self.model = model
+        self.max_tokens = max_tokens
+        self.client = client or httpx.Client(
+            headers={"Authorization": f"Bearer {api_key}"}
+        )
+
+    def generate(self, prompt: str) -&gt; LLMResult:
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": self.max_tokens,
+            "temperature": 0,
+        }
+        try:
+            resp = self.client.post(OPENROUTER_URL, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+            text = data["choices"][0]["message"]["content"]
+        except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError) as e:
+            raise LLMError("The model request failed.") from e
+        usage = data.get("usage") or {}
+        return LLMResult(
+            text=text,
+            input_tokens=usage.get("prompt_tokens", 0),
+            output_tokens=usage.get("completion_tokens", 0),
+        )</code></pre>
+<p>Add a branch to <code>get_llm()</code> in <code>app/llm/__init__.py</code>, before the final <code>raise</code>:</p>
+<pre><code>    if provider == "openrouter":
+        from app.llm.openrouter import OpenRouterLLM
+        return OpenRouterLLM(
+            api_key=os.environ["OPENROUTER_API_KEY"],
+            model=os.environ.get("OPENROUTER_MODEL", "qwen/qwen-2.5-coder-32b-instruct"),
+        )</code></pre>
+<p>In <code>main.py</code>, import <code>HTTPException</code> from fastapi and <code>LLMError</code> from <code>app.llm.base</code>, and replace the <code>chat</code> body with:</p>
+<pre><code>    try:
+        result = llm.generate(body.message)
+    except LLMError:
+        logger.exception("llm_call_failed")
+        raise HTTPException(status_code=502, detail="The language model is unavailable.")
+    return ChatResponse(reply=result.text)</code></pre>
+<p>The client gets a generic message. Provider details go to the server log only.</p>
+<p>Compose, replace the <code>backend</code> <code>environment:</code> block with:</p>
+<pre><code>    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LLM_PROVIDER: ${LLM_PROVIDER:-fake}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-qwen/qwen-2.5-coder-32b-instruct}</code></pre>
+<p>Add the same names to <code>.env.example</code> with blank values (<code>LLM_PROVIDER=fake</code>). In your real, git-ignored <code>.env</code>, set <code>LLM_PROVIDER=openrouter</code> and <code>OPENROUTER_API_KEY</code> to your key. Leave <code>OPENROUTER_MODEL</code> unset to use Qwen2.5 Coder. Setting it to another slug later swaps the model with no code change.</p>
+<p>Tests, in <code>backend/tests/test_openrouter.py</code> (a stub client, so no network and no cost):</p>
+<pre><code>import httpx
+import pytest
+
+from app.llm.base import LLMError
+from app.llm.openrouter import OpenRouterLLM
+
+OK = {
+    "choices": [{"message": {"content": "Hi there"}}],
+    "usage": {"prompt_tokens": 5, "completion_tokens": 3},
+}
+
+
+class FakeResponse:
+    def __init__(self, data=None, status=200):
+        self.data, self.status = data, status
+
+    def raise_for_status(self):
+        if self.status &gt;= 400:
+            req = httpx.Request("POST", "https://example.test")
+            raise httpx.HTTPStatusError(
+                "error", request=req, response=httpx.Response(self.status, request=req)
+            )
+
+    def json(self):
+        return self.data
+
+
+class FakeClient:
+    def __init__(self, response):
+        self.response = response
+
+    def post(self, url, **kwargs):
+        self.kwargs = kwargs
+        return self.response
+
+
+def test_generate_parses_response():
+    fake = FakeClient(FakeResponse(OK))
+    result = OpenRouterLLM(api_key="k", model="test-model", client=fake).generate("hello")
+    assert result.text == "Hi there"
+    assert (result.input_tokens, result.output_tokens) == (5, 3)
+    assert fake.kwargs["json"]["model"] == "test-model"
+    assert fake.kwargs["json"]["max_tokens"] == 512
+
+
+def test_http_error_becomes_llm_error():
+    llm = OpenRouterLLM(api_key="k", model="m", client=FakeClient(FakeResponse(status=401)))
+    with pytest.raises(LLMError):
+        llm.generate("hi")</code></pre>
+<p>Add this to <code>test_chat.py</code> (and <code>from app.llm.base import LLMError</code> at the top):</p>
+<pre><code>def test_chat_returns_502_on_llm_failure():
+    class Failing:
+        def generate(self, prompt):
+            raise LLMError("boom")
+
+    app.dependency_overrides[get_llm] = lambda: Failing()
+    assert client.post("/chat", json={"message": "hi"}).status_code == 502</code></pre>
+<p><b>Run:</b> <code>pytest</code> (expect <code>12 passed</code>), then <code>docker compose up --build -d</code>. At <code>/docs</code>, call <code>POST /chat</code> with <code>{"message": "Reply with the single word: pong"}</code>. Expect a <code>reply</code> with model text, and a <code>request_id=</code> line in <code>docker compose logs backend</code>.</p>
+<p><b>If it fails:</b> the traceback in the logs names the HTTP status. 401 means the key is invalid or didn't reach the container (check with <code>docker compose exec backend python -c "import os; print(bool(os.getenv('OPENROUTER_API_KEY')))"</code>, which prints only True or False). 402 means no credits. 400 or 404 usually means the model slug is wrong or unavailable, so compare it with the model page. 429 means you are being rate-limited.</p>
+<p><b>Gate:</b> 12 passed, one real reply observed, and no secrets in <code>git status</code>. Commit: <code>feat: add OpenRouter LLM provider</code>.</p></div></details>
+
+<details><summary>M9: Failure handling, timeouts, and cost controls</summary><div class="step">
+<p><b>Adds:</b> request timeouts, typed errors with the right HTTP codes, a token budget, and token logging. <b>Not yet:</b> persistent usage tracking. The budget is an in-memory safety net that resets on restart. Real spend limits belong in AWS Budgets and IAM.</p>
+<p>Append to <code>app/llm/base.py</code>:</p>
+<pre><code>class LLMTimeoutError(LLMError):
+    """The model did not answer in time."""
+
+
+class LLMRateLimitError(LLMError):
+    """Provider throttling or our own token budget."""
+
+
+class LLMConfigError(LLMError):
+    """Missing or invalid credentials, model, or settings."""</code></pre>
+<p><code>backend/app/llm/budget.py</code>:</p>
+<pre><code>from threading import Lock
+
+from app.llm.base import LLMRateLimitError
+
+
+class TokenBudget:
+    def __init__(self, limit: int) -&gt; None:
+        self.limit = limit
+        self.used = 0
+        self._lock = Lock()
+
+    def check(self) -&gt; None:
+        with self._lock:
+            if self.used &gt;= self.limit:
+                raise LLMRateLimitError("Token budget exhausted.")
+
+    def record(self, tokens: int) -&gt; None:
+        with self._lock:
+            self.used += tokens</code></pre>
+<p>Replace <code>app/llm/openrouter.py</code> in full:</p>
+<pre><code>import httpx
+
+from app.llm.base import (
+    LLMConfigError, LLMError, LLMRateLimitError, LLMResult, LLMTimeoutError,
+)
+
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+
+class OpenRouterLLM:
+    def __init__(self, api_key, model, max_tokens=512, timeout=20.0, client=None):
+        self.model = model
+        self.max_tokens = max_tokens
+        self.client = client or httpx.Client(
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=httpx.Timeout(timeout, connect=5.0),
+        )
+
+    def generate(self, prompt: str) -&gt; LLMResult:
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": self.max_tokens,
+            "temperature": 0,
+        }
+        try:
+            resp = self.client.post(OPENROUTER_URL, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+        except httpx.TimeoutException as e:
+            raise LLMTimeoutError("The model request timed out.") from e
+        except httpx.HTTPStatusError as e:
+            status = e.response.status_code
+            if status == 408:
+                raise LLMTimeoutError("The provider timed out.") from e
+            if status == 429:
+                raise LLMRateLimitError("The provider is rate-limiting requests.") from e
+            if status in {400, 401, 402, 403, 404}:
+                raise LLMConfigError(f"Provider rejected the request: HTTP {status}") from e
+            raise LLMError(f"Provider error: HTTP {status}") from e
+        except (httpx.HTTPError, ValueError) as e:
+            raise LLMError("The model request failed.") from e
+        if isinstance(data, dict) and "error" in data:
+            raise LLMError("The provider returned an error response.")
+        try:
+            text = data["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as e:
+            raise LLMError("Unexpected response shape from the model.") from e
+        if not isinstance(text, str):
+            raise LLMError("The model returned no text.")
+        usage = data.get("usage") or {}
+        return LLMResult(
+            text=text,
+            input_tokens=usage.get("prompt_tokens", 0),
+            output_tokens=usage.get("completion_tokens", 0),
+        )</code></pre>
+<p>There are no client-side retries here, so one slow call can take at most about the timeout you set. Add retries later only if you see transient failures, and remember they multiply latency.</p>
+<p>Replace the openrouter branch and the final <code>raise</code> in <code>get_llm()</code> in <code>app/llm/__init__.py</code> (and import <code>LLMConfigError</code>):</p>
+<pre><code>    if provider == "openrouter":
+        from app.llm.openrouter import OpenRouterLLM
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+            raise LLMConfigError("OPENROUTER_API_KEY must be set.")
+        return OpenRouterLLM(
+            api_key=api_key,
+            model=os.getenv("OPENROUTER_MODEL", "qwen/qwen-2.5-coder-32b-instruct"),
+            max_tokens=int(os.getenv("LLM_MAX_OUTPUT_TOKENS", "512")),
+            timeout=float(os.getenv("LLM_TIMEOUT_SECONDS", "20")),
+        )
+    raise LLMConfigError(f"Unknown LLM_PROVIDER: {provider}")</code></pre>
+<p>Replace <code>backend/app/main.py</code> in full:</p>
+<pre><code>import logging
+import os
+import time
+import uuid
+
+from fastapi import Depends, FastAPI, Request
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.llm import get_llm
+from app.llm.base import (
+    LLMConfigError, LLMError, LLMRateLimitError, LLMService, LLMTimeoutError,
+)
+from app.llm.budget import TokenBudget
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s %(message)s",
+)
+logger = logging.getLogger("bi_agent")
+
+app = FastAPI(title="BI Agent API")
+budget = TokenBudget(int(os.getenv("LLM_TOKEN_BUDGET", "50000")))
+
+# Most specific first; LLMError is the catch-all.
+LLM_ERRORS = [
+    (LLMTimeoutError, 504, "The language model timed out."),
+    (LLMRateLimitError, 429, "Too many requests to the language model."),
+    (LLMConfigError, 503, "The language model is not configured correctly."),
+    (LLMError, 502, "The language model request failed."),
+]
+
+
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    request.state.request_id = request_id
+    start = time.perf_counter()
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    ms = (time.perf_counter() - start) * 1000
+    logger.info("request_id=%s %s %s -&gt; %s %.1fms", request_id,
+                request.method, request.url.path, response.status_code, ms)
+    return response
+
+
+@app.exception_handler(LLMError)
+async def llm_error_handler(request: Request, exc: LLMError):
+    for cls, status, message in LLM_ERRORS:
+        if isinstance(exc, cls):
+            logger.warning("request_id=%s llm_error=%s detail=%s",
+                           getattr(request.state, "request_id", "-"), type(exc).__name__, exc)
+            return JSONResponse(status_code=status, content={"detail": message})
+
+
+class ChatRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+    message: str = Field(min_length=1, max_length=2000)
+
+
+class ChatResponse(BaseModel):
+    reply: str
+
+
+@app.get("/health")
+def health() -&gt; dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/hello")
+def hello() -&gt; dict[str, str]:
+    return {"message": "Hello, BI Agent!"}
+
+
+@app.post("/chat", response_model=ChatResponse)
+def chat(body: ChatRequest, request: Request,
+         llm: LLMService = Depends(get_llm)) -&gt; ChatResponse:
+    budget.check()
+    result = llm.generate(body.message)
+    budget.record(result.input_tokens + result.output_tokens)
+    logger.info("request_id=%s llm_tokens in=%s out=%s", request.state.request_id,
+                result.input_tokens, result.output_tokens)
+    return ChatResponse(reply=result.text)</code></pre>
+<p>Compose, add to the backend <code>environment:</code>: <code>LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-20}</code>, <code>LLM_MAX_OUTPUT_TOKENS: ${LLM_MAX_OUTPUT_TOKENS:-512}</code>, <code>LLM_TOKEN_BUDGET: ${LLM_TOKEN_BUDGET:-50000}</code>. Mirror them in <code>.env.example</code>.</p>
+<p>Add to <code>test_chat.py</code> (also <code>from app import main</code>, <code>from app.llm.budget import TokenBudget</code>, and <code>from app.llm.base import LLMConfigError, LLMRateLimitError, LLMTimeoutError</code>):</p>
+<pre><code>@pytest.mark.parametrize("exc, status", [
+    (LLMTimeoutError("t"), 504),
+    (LLMRateLimitError("r"), 429),
+    (LLMConfigError("c"), 503),
+    (LLMError("e"), 502),
+])
+def test_llm_errors_map_to_status(exc, status):
+    class Failing:
+        def generate(self, prompt):
+            raise exc
+
+    app.dependency_overrides[get_llm] = lambda: Failing()
+    assert client.post("/chat", json={"message": "hi"}).status_code == status
+
+
+def test_token_budget_exhausted_returns_429(monkeypatch):
+    monkeypatch.setattr(main, "budget", TokenBudget(limit=1))
+    assert client.post("/chat", json={"message": "hello"}).status_code == 200
+    assert client.post("/chat", json={"message": "hello"}).status_code == 429
+
+
+def test_missing_openrouter_key_is_config_error(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "openrouter")
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    get_llm.cache_clear()
+    with pytest.raises(LLMConfigError):
+        get_llm()
+    get_llm.cache_clear()</code></pre>
+<p>Add to <code>test_openrouter.py</code> (plus <code>LLMConfigError</code>, <code>LLMRateLimitError</code>, and <code>LLMTimeoutError</code> imported from <code>app.llm.base</code>):</p>
+<pre><code>class TimeoutClient:
+    def post(self, url, **kwargs):
+        raise httpx.ReadTimeout("slow")
+
+
+@pytest.mark.parametrize("client, expected", [
+    (TimeoutClient(), LLMTimeoutError),
+    (FakeClient(FakeResponse(status=429)), LLMRateLimitError),
+    (FakeClient(FakeResponse(status=401)), LLMConfigError),
+    (FakeClient(FakeResponse(status=503)), LLMError),
+])
+def test_openrouter_errors_are_mapped(client, expected):
+    with pytest.raises(expected):
+        OpenRouterLLM(api_key="k", model="m", client=client).generate("hi")</code></pre>
+<p><b>Run:</b> <code>pytest</code>. Expect <code>22 passed</code> (parametrized cases count separately, so share your number if it differs). Then rebuild with <code>docker compose up --build -d</code> and try these manually:</p>
+<ul>
+<li><b>Normal call:</b> works, and the logs show an <code>llm_tokens in=... out=...</code> line with the request ID.</li>
+<li><b>Missing key:</b> blank <code>OPENROUTER_API_KEY</code> in <code>.env</code>, recreate, call <code>/chat</code>. Expect a 503 with a generic message, and the detail only in the logs.</li>
+<li><b>Wrong key:</b> set <code>OPENROUTER_API_KEY=wrong</code>. Expect a 503, because a 401 from the provider is treated as a configuration problem.</li>
+<li><b>Budget:</b> set <code>LLM_TOKEN_BUDGET=20</code>, recreate, call twice. Expect 200, then 429.</li>
+<li><b>Timeout:</b> set <code>LLM_TIMEOUT_SECONDS=0.5</code>. A real call will likely time out and return a 504, but that depends on network speed, so it may not trigger. The unit test covers the mapping either way.</li>
+</ul>
+<p>Restore your normal <code>.env</code> afterwards.</p>
+<p><b>Gate:</b> all tests green, every manual case observed or explicitly skipped, and no secrets in <code>git status</code>. Commit: <code>feat: add LLM error handling, timeouts, and token budget</code>.</p></div></details>
+<p class="key">Phase 2 gate: valid, invalid, failing, timed-out, and over-budget requests are all handled, and the fake provider keeps the test suite free and offline. A minimal chat box in the Streamlit UI is deliberately left out. It can be a small follow-up once you've seen M9 working.</p>
+
+<h2>Step-by-step guide: Phase 3 (data access) and Phase 4 (BI foundations)</h2>
+<p><b>Order matters:</b> Phase 4 needs the database, the sample data, and the read-only executor from Phase 3, so M10 to M12 come first. Everything here is unverified until you share real output. Detail is at outline level for the safety-critical code and test cases. I'll give the complete test files and exact fixes in chat as you reach each milestone.</p>
+<p><b>Design decisions:</b></p>
+<ul>
+<li>One PostgreSQL container holds the sample analytical data. The metadata database from the original stack is postponed, because the metric registry starts as Python code and schema metadata is read from the database itself.</li>
+<li>Authorization lives in the database: a <code>bi_readonly</code> role with <code>SELECT</code> on two tables only. The SQL validator is a second layer, and the LLM enforces nothing.</li>
+<li><b>M15 generates SQL but never runs it.</b> Execution arrives only in M16, after parsing, validation, and the allowlist exist. This follows your rule that SQL safety can't come after the risk.</li>
+<li>Numbers come from the database and deterministic code. The LLM writes SQL and wording, and every number in its wording is checked against the result.</li>
+</ul>
+
+<details><summary>M10: Local sample database and seed data</summary><div class="step">
+<p><b>Adds:</b> a Postgres service with fixed seed data and a read-only role. <b>Not yet:</b> any Python database code.</p>
+<p>Create <code>db/init/01_schema.sql</code>:</p>
+<pre><code>CREATE TABLE regions (id INT PRIMARY KEY, name TEXT NOT NULL);
+CREATE TABLE orders (
+  id INT PRIMARY KEY,
+  order_date DATE NOT NULL,
+  region_id INT NOT NULL REFERENCES regions(id),
+  status TEXT NOT NULL,
+  amount NUMERIC(12,2) NOT NULL
+);
+CREATE TABLE internal_notes (id INT PRIMARY KEY, note TEXT NOT NULL);</code></pre>
+<p><code>db/init/02_seed.sql</code> (small and fixed, so every number is known in advance):</p>
+<pre><code>INSERT INTO regions VALUES (1,'North'),(2,'South'),(3,'West');
+INSERT INTO orders VALUES
+ (1,'2026-08-03',1,'completed',100.00),(2,'2026-08-10',1,'completed',150.00),
+ (3,'2026-08-15',2,'completed',200.00),(4,'2026-08-20',3,'cancelled',50.00),
+ (5,'2026-08-25',3,'completed',120.00),(6,'2026-09-02',1,'completed',180.00),
+ (7,'2026-09-05',2,'completed',220.00),(8,'2026-09-12',2,'completed',80.00),
+ (9,'2026-09-18',3,'completed',140.00),(10,'2026-09-22',1,'cancelled',60.00),
+ (11,'2026-09-27',3,'completed',100.00),(12,'2026-09-30',1,'completed',90.00);
+INSERT INTO internal_notes VALUES (1,'not for the BI agent');</code></pre>
+<p><code>db/init/03_roles.sql</code> (the local dev password is a placeholder; real ones come from secrets at deployment):</p>
+<pre><code>CREATE ROLE bi_readonly LOGIN PASSWORD 'readonly_dev_pw';
+GRANT CONNECT ON DATABASE analytics TO bi_readonly;
+GRANT USAGE ON SCHEMA public TO bi_readonly;
+GRANT SELECT ON orders, regions TO bi_readonly;
+ALTER ROLE bi_readonly SET default_transaction_read_only = on;
+ALTER ROLE bi_readonly SET statement_timeout = '5s';</code></pre>
+<p>Compose: add the service, a volume, and a dependency for the backend:</p>
+<pre><code>  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: analytics
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: ${DB_ADMIN_PASSWORD:-admin_dev_pw}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d analytics"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:</code></pre>
+<p>Under <code>backend:</code> add <code>depends_on: {db: {condition: service_healthy}}</code> (in the same nested style as the frontend) and the environment entry <code>DATABASE_URL: postgresql://bi_readonly:readonly_dev_pw@db:5432/analytics</code>.</p>
+<p><b>Run:</b> <code>docker compose up -d db</code>, then:</p>
+<pre><code>docker compose exec db psql -U admin -d analytics -c "SELECT status, count(*), sum(amount) FROM orders GROUP BY status"
+docker compose exec db psql -U bi_readonly -d analytics -c "SELECT * FROM internal_notes"</code></pre>
+<p><b>Expect:</b> <code>completed | 10 | 1380.00</code> and <code>cancelled | 2 | 110.00</code>. The second command fails with <code>permission denied for table internal_notes</code>. That is the authorization boundary working. Init scripts run only on an empty data volume, so after editing them use <code>docker compose down -v</code> to re-seed. If port 5432 is busy on your Mac, change the host side to 5433 and use it in test URLs.</p>
+<p><b>Gate:</b> both outputs observed. Commit: <code>feat: add sample analytics database</code>.</p></div></details>
+
+<details><summary>M11: Database connectivity and deterministic queries</summary><div class="step">
+<p><b>Adds:</b> psycopg, a small <code>db.py</code>, <code>GET /db/ping</code>, and integration tests. <b>Not yet:</b> row caps (M12).</p>
+<p>Add <code>psycopg[binary]&gt;=3.2</code> to <code>backend/requirements.txt</code> and reinstall in the venv. <code>backend/app/db.py</code> (final M12 version below; M11 needs only the connect, execute, and fetch parts):</p>
+<pre><code>import os
+from datetime import date
+from decimal import Decimal
+
+import psycopg
+from psycopg import errors
+
+
+class DBError(Exception):
+    """Database failure."""
+
+
+class DBTimeoutError(DBError):
+    """Query exceeded the time limit."""
+
+
+def _json_safe(v):
+    if isinstance(v, Decimal):
+        return float(v)
+    if isinstance(v, date):
+        return v.isoformat()
+    return v
+
+
+def run_readonly(sql, params=None, max_rows=200, timeout_ms=5000):
+    url = os.getenv("DATABASE_URL")
+    if not url:
+        raise DBError("DATABASE_URL is not set.")
+    try:
+        with psycopg.connect(
+            url, connect_timeout=5,
+            options=f"-c statement_timeout={timeout_ms} -c default_transaction_read_only=on",
+        ) as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, params)
+                if cur.description is None:
+                    raise DBError("The statement returned no result set.")
+                columns = [c.name for c in cur.description]
+                rows = cur.fetchmany(max_rows + 1)
+    except errors.QueryCanceled as e:
+        raise DBTimeoutError("Query timed out.") from e
+    except psycopg.Error as e:
+        raise DBError("Database error.") from e
+    truncated = len(rows) &gt; max_rows
+    return {
+        "columns": columns,
+        "rows": [[_json_safe(v) for v in r] for r in rows[:max_rows]],
+        "truncated": truncated,
+    }</code></pre>
+<p>Decimals become floats for JSON, which is fine for this sample but worth revisiting for real money values. When <code>params</code> is <code>None</code>, psycopg doesn't touch <code>%</code> characters, so <code>LIKE '%x%'</code> in generated SQL is safe to pass through.</p>
+<p>In <code>main.py</code>, add <code>GET /db/ping</code> returning <code>run_readonly("SELECT 1 AS result")</code>, and an exception handler mapping <code>DBTimeoutError</code> to 504 and <code>DBError</code> to 503 with generic messages (same pattern as <code>LLMError</code>).</p>
+<p>Add to <code>backend/pytest.ini</code>: <code>markers = integration: needs the Compose database</code>. Create <code>backend/tests/conftest.py</code> with <code>os.environ.setdefault("DATABASE_URL", "postgresql://bi_readonly:readonly_dev_pw@localhost:5432/analytics")</code>. Mark database tests <code>@pytest.mark.integration</code>.</p>
+<p><b>Tests:</b> <code>SELECT 1 AS result</code> returns <code>[[1]]</code>; <code>SELECT sum(amount) FROM orders WHERE status='completed'</code> returns <code>1380.0</code>; <code>/db/ping</code> returns 200; an unset <code>DATABASE_URL</code> raises <code>DBError</code>.</p>
+<p><b>Run:</b> <code>docker compose up -d db</code>, then <code>pytest</code> in <code>backend/</code>. Use <code>pytest -m "not integration"</code> when the database is down. <b>Gate:</b> all pass, earlier tests still green. Commit: <code>feat: add database connectivity</code>.</p></div></details>
+
+<details><summary>M12: Read-only execution and execution limits</summary><div class="step">
+<p><b>Adds:</b> proof that the guards work. <b>Not yet:</b> any natural language. The code is already in the M11 <code>run_readonly</code>: the read-only role, <code>default_transaction_read_only</code>, <code>statement_timeout</code>, and <code>fetchmany</code> for the row cap.</p>
+<p><b>Tests (all integration):</b></p>
+<ul>
+<li><code>INSERT INTO orders ...</code> raises <code>DBError</code>, and <code>SELECT count(*) FROM orders</code> is still 12.</li>
+<li><code>SELECT * FROM internal_notes</code> raises <code>DBError</code> (no privilege).</li>
+<li><code>SELECT pg_sleep(2)</code> with <code>timeout_ms=500</code> raises <code>DBTimeoutError</code>.</li>
+<li><code>SELECT generate_series(1, 1000)</code> with <code>max_rows=5</code> returns 5 rows and <code>truncated</code> true.</li>
+</ul>
+<p><b>Gate:</b> all four pass, so reads work and writes, forbidden tables, slow queries, and huge results are all stopped. Commit: <code>test: verify read-only execution and limits</code>.</p></div></details>
+
+<details><summary>M13: Minimal metric registry</summary><div class="step">
+<p><b>Adds:</b> governed metric definitions and a deterministic SQL builder. <b>Not yet:</b> the LLM, or a metadata database. No new dependencies.</p>
+<p><code>backend/app/bi/__init__.py</code> (empty) and <code>backend/app/bi/metrics.py</code>:</p>
+<pre><code>from dataclasses import dataclass
+
+
+class UnknownMetricError(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
+class Metric:
+    name: str
+    description: str
+    expression: str
+    base_where: str
+
+
+@dataclass(frozen=True)
+class Dimension:
+    name: str
+    select: str
+    join: str = ""
+
+
+METRICS = {
+    "revenue": Metric("revenue", "Total amount of completed orders",
+                      "SUM(o.amount)", "o.status = 'completed'"),
+    "order_count": Metric("order_count", "Number of completed orders",
+                          "COUNT(*)", "o.status = 'completed'"),
+}
+DIMENSIONS = {
+    "region": Dimension("region", "r.name", "JOIN regions r ON r.id = o.region_id"),
+    "month": Dimension("month", "to_char(date_trunc('month', o.order_date), 'YYYY-MM')"),
+}
+
+
+def build_metric_query(metric, dimension, start, end):
+    if metric not in METRICS:
+        raise UnknownMetricError(f"Unknown metric: {metric}")
+    m = METRICS[metric]
+    where = f"WHERE {m.base_where} AND o.order_date &gt;= %s AND o.order_date &lt; %s"
+    if dimension is None:
+        return f"SELECT {m.expression} AS value FROM orders o {where}", (start, end)
+    if dimension not in DIMENSIONS:
+        raise UnknownMetricError(f"Unknown dimension: {dimension}")
+    d = DIMENSIONS[dimension]
+    sql = (f"SELECT {d.select} AS dimension, {m.expression} AS value "
+           f"FROM orders o {d.join} {where} GROUP BY 1 ORDER BY 1")
+    return sql, (start, end)</code></pre>
+<p>Metric and dimension names are checked against fixed dictionaries, and only dates are passed as parameters, so no user text ever becomes SQL.</p>
+<p><b>Golden tests (integration):</b> with dates passed as <code>datetime.date</code>, revenue for <code>[2026-09-01, 2026-10-01)</code> is 810.0. Revenue by month over Aug and Sep is <code>[['2026-08', 570.0], ['2026-09', 810.0]]</code>. Revenue by region over both months is North 520, South 500, West 360. Order count for September is 6. An unknown metric or dimension raises <code>UnknownMetricError</code>.</p>
+<p><b>Gate:</b> all golden numbers match. Commit: <code>feat: add metric registry</code>.</p></div></details>
+
+<details><summary>M14: Schema and metadata retrieval</summary><div class="step">
+<p><b>Adds:</b> a read of the permitted schema, plus text the LLM can use. <b>Not yet:</b> a vector database, since two tables don't need retrieval.</p>
+<p><code>backend/app/bi/schema.py</code>:</p>
+<pre><code>from app.bi.metrics import METRICS
+from app.db import run_readonly
+
+ALLOWED_TABLES = ("orders", "regions")
+
+
+def get_schema():
+    result = run_readonly(
+        "SELECT table_name, column_name, data_type FROM information_schema.columns "
+        "WHERE table_schema = 'public' AND table_name = ANY(%s) "
+        "ORDER BY table_name, ordinal_position",
+        (list(ALLOWED_TABLES),),
+    )
+    schema = {}
+    for table, column, dtype in result["rows"]:
+        schema.setdefault(table, []).append({"column": column, "type": dtype})
+    return schema
+
+
+def schema_text():
+    return "\n".join(
+        f"{t}({', '.join(c['column'] + ' ' + c['type'] for c in cols)})"
+        for t, cols in get_schema().items()
+    )
+
+
+def metrics_text():
+    return "\n".join(
+        f"- {m.name}: {m.description}; {m.expression} over orders o WHERE {m.base_where}"
+        for m in METRICS.values()
+    )</code></pre>
+<p>Add <code>GET /schema</code> returning <code>get_schema()</code>. <b>Tests (integration):</b> the schema has exactly <code>orders</code> and <code>regions</code> with the expected columns, <code>internal_notes</code> is absent, and <code>metrics_text()</code> mentions <code>revenue</code>.</p>
+<p><b>Gate:</b> tests pass and <code>/schema</code> output matches the seed. Commit: <code>feat: add schema metadata retrieval</code>.</p></div></details>
+
+<details><summary>M15: First natural-language-to-SQL flow (returns SQL only)</summary><div class="step">
+<p><b>Adds:</b> prompt building, SQL extraction, and <code>POST /ask/sql</code>. <b>Not yet:</b> executing the generated SQL. It is untrusted until M16.</p>
+<p><code>backend/app/bi/text_to_sql.py</code>:</p>
+<pre><code>import re
+from datetime import date
+
+from app.bi.schema import metrics_text, schema_text
+
+FENCE = re.compile(r"```(?:sql)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
+
+
+def build_prompt(question: str, today: date) -&gt; str:
+    return (
+        "You write PostgreSQL for a BI tool. Return exactly one SELECT statement "
+        "and nothing else. Use only the tables and columns listed below. "
+        "Prefer the metric definitions. Use explicit date ranges.\n\n"
+        f"Today's date: {today.isoformat()}\n\n"
+        f"Schema:\n{schema_text()}\n\nMetrics:\n{metrics_text()}\n\n"
+        f"Question: {question}\nSQL:"
+    )
+
+
+def extract_sql(text: str) -&gt; str:
+    m = FENCE.search(text)
+    return (m.group(1) if m else text).strip()
+
+
+def generate_sql(question: str, generate, today: date) -&gt; str:
+    return extract_sql(generate(build_prompt(question, today)))</code></pre>
+<p>Here <code>generate</code> is any function from prompt text to model text, so the module has no FastAPI or provider dependency. Today's date is passed in, so "last month" resolves deterministically.</p>
+<p>In <code>main.py</code>, add a helper that wraps the LLM with the token budget and logging, and the endpoint:</p>
+<pre><code>def make_generate(llm, request):
+    def generate(prompt: str) -&gt; str:
+        budget.check()
+        result = llm.generate(prompt)
+        budget.record(result.input_tokens + result.output_tokens)
+        logger.info("request_id=%s llm_tokens in=%s out=%s",
+                    request.state.request_id, result.input_tokens, result.output_tokens)
+        return result.text
+    return generate
+
+
+@app.post("/ask/sql")
+def ask_sql(body: ChatRequest, request: Request, llm: LLMService = Depends(get_llm)):
+    sql = generate_sql(body.message, make_generate(llm, request), date.today())
+    return {"question": body.message, "sql": sql}</code></pre>
+<p><b>Tests (a scripted fake LLM, no network):</b> the prompt contains the table names, the metric definitions, and today's date; a fenced <code>```sql</code> answer is extracted cleanly; plain text passes through trimmed; the endpoint returns the scripted SQL and executes nothing.</p>
+<p><b>Manual check with the real model:</b> ask "What was revenue by region in September 2026?" and read the SQL by eye. Don't run it yet. Expect a grouped query over <code>orders</code> joined to <code>regions</code> with a completed filter. Model output varies, so judge it, don't match it exactly.</p>
+<p><b>Gate:</b> tests pass and one real question produces sensible SQL. Commit: <code>feat: add natural-language-to-SQL generation</code>.</p></div></details>
+
+<details><summary>M16: SQL parsing, validation, and authorization</summary><div class="step">
+<p><b>Adds:</b> SQLGlot validation and <code>POST /ask</code>, which now executes. <b>Not yet:</b> per-user roles (M22).</p>
+<p>Add <code>sqlglot&gt;=25</code> to <code>backend/requirements.txt</code>. <code>backend/app/bi/sql_guard.py</code>:</p>
+<pre><code>import sqlglot
+from sqlglot import exp
+from sqlglot.errors import SqlglotError
+
+from app.bi.schema import ALLOWED_TABLES
+
+BLOCKED_PREFIXES = ("pg_", "lo_", "dblink", "set_config", "current_setting")
+
+
+class SQLRejected(Exception):
+    pass
+
+
+def validate_sql(sql: str) -&gt; str:
+    try:
+        statements = [s for s in sqlglot.parse(sql, read="postgres") if s is not None]
+    except SqlglotError as e:
+        raise SQLRejected("The SQL could not be parsed.") from e
+    if len(statements) != 1:
+        raise SQLRejected("Exactly one statement is allowed.")
+    tree = statements[0]
+    if not isinstance(tree, exp.Select):
+        raise SQLRejected("Only SELECT statements are allowed.")
+    if tree.find(exp.Into) or tree.args.get("locks"):
+        raise SQLRejected("SELECT INTO and locking clauses are not allowed.")
+    ctes = {c.alias for c in tree.find_all(exp.CTE)}
+    for t in tree.find_all(exp.Table):
+        if t.name in ctes and not t.db:
+            continue
+        if t.db or t.catalog:
+            raise SQLRejected("Schema-qualified tables are not allowed.")
+        if t.name.lower() not in ALLOWED_TABLES:
+            raise SQLRejected(f"Table not permitted: {t.name}")
+    for f in tree.find_all(exp.Anonymous):
+        if f.name.lower().startswith(BLOCKED_PREFIXES):
+            raise SQLRejected(f"Function not permitted: {f.name}")
+    return tree.sql(dialect="postgres")</code></pre>
+<p>It returns the SQL re-serialized from the validated tree, so what you execute is what you checked. It rejects <code>UNION</code> on purpose, to keep the rules simple. The function denylist is incomplete by nature. That is why the database role, read-only transaction, timeout, and row cap from M10 to M12 remain the real enforcement. This validator is defense in depth.</p>
+<p>Add <code>backend/app/bi/service.py</code> and the endpoint:</p>
+<pre><code>from app.bi.sql_guard import validate_sql
+from app.bi.text_to_sql import generate_sql
+from app.db import run_readonly
+
+
+def answer_question(question, generate, today):
+    sql = validate_sql(generate_sql(question, generate, today))
+    result = run_readonly(sql)
+    return {"question": question, "sql": sql, **result}</code></pre>
+<pre><code>@app.exception_handler(SQLRejected)
+async def sql_rejected_handler(request: Request, exc: SQLRejected):
+    logger.warning("request_id=%s sql_rejected=%s", getattr(request.state, "request_id", "-"), exc)
+    return JSONResponse(status_code=422, content={"detail": "The generated query was rejected."})
+
+
+@app.post("/ask")
+def ask(body: ChatRequest, request: Request, llm: LLMService = Depends(get_llm)):
+    return answer_question(body.message, make_generate(llm, request), date.today())</code></pre>
+<p><b>Validator tests (unit, no database):</b> these must raise <code>SQLRejected</code>: <code>DROP TABLE orders</code>, <code>DELETE FROM orders</code>, <code>UPDATE orders SET amount=0</code>, <code>SELECT 1; SELECT 2</code>, <code>SELECT * FROM internal_notes</code>, <code>SELECT * FROM pg_catalog.pg_tables</code>, <code>SELECT * FROM information_schema.columns</code>, <code>SELECT pg_sleep(5)</code>, <code>SELECT * INTO x FROM orders</code>, <code>SELECT * FROM orders FOR UPDATE</code>, and an empty string. These must pass: a revenue-by-region query, and a <code>WITH</code> query over <code>orders</code>.</p>
+<p><b>Endpoint tests (integration, scripted LLM):</b> scripted malicious SQL returns 422 and <code>SELECT count(*) FROM orders</code> is still 12; a scripted revenue query for September returns 810.0.</p>
+<p><b>Gate:</b> every reject case rejects, accept cases accept, the data is untouched, and the golden answer matches. Commit: <code>feat: add SQL validation and guarded execution</code>.</p></div></details>
+
+<details><summary>M17: Result validation and grounded answers</summary><div class="step">
+<p><b>Adds:</b> a second LLM step that explains the result, with a numeric check. <b>Not yet:</b> derived numbers such as percent changes. Those come from deterministic code in later milestones.</p>
+<p><code>backend/app/bi/grounding.py</code>:</p>
+<pre><code>import re
+
+NUM = re.compile(r"\d[\d,]*\.?\d*")
+
+
+def _numbers(text):
+    out = set()
+    for m in NUM.findall(text):
+        try:
+            out.add(round(float(m.replace(",", "").rstrip(".")), 2))
+        except ValueError:
+            pass
+    return out
+
+
+def is_grounded(answer, question, rows):
+    allowed = _numbers(question)
+    for row in rows:
+        for v in row:
+            if isinstance(v, (int, float)):
+                allowed.add(round(float(v), 2))
+    return _numbers(answer) &lt;= allowed
+
+
+def fallback_answer(columns, rows):
+    if not rows:
+        return "The query returned no rows."
+    return "; ".join(", ".join(f"{c}: {v}" for c, v in zip(columns, r)) for r in rows[:10])
+
+
+def answer_prompt(question, sql, result):
+    return (
+        "Answer the question in one or two sentences using ONLY the data below. "
+        "Do not use any number that is not in the data.\n\n"
+        f"Question: {question}\nSQL: {sql}\nColumns: {result['columns']}\n"
+        f"Rows: {result['rows'][:50]}\nTruncated: {result['truncated']}"
+    )</code></pre>
+<p>Update <code>answer_question</code> in <code>service.py</code> to run the guarded query, return the fallback without calling the LLM when there are no rows, otherwise draft an answer with <code>generate(answer_prompt(...))</code>, and use it only if <code>is_grounded</code> is true. The response gains <code>answer</code> and <code>answer_source</code> (<code>"llm"</code> or <code>"fallback"</code>).</p>
+<p>The check is deliberately strict. A date such as "2026-09" or a percentage the model computed will fail it and trigger the plain fallback. That costs polish, not correctness.</p>
+<p><b>Tests (scripted LLM):</b> an answer using only result numbers is accepted (source <code>llm</code>); an answer with an invented number falls back (source <code>fallback</code>); an empty result never calls the LLM (script it to raise if called); <code>1,380.00</code> and <code>1380</code> compare equal; <code>truncated</code> is passed through to the response.</p>
+<p><b>Manual check with the real model:</b> ask "What was revenue by region in September 2026?" and compare the answer's numbers with the golden values (North 180+90 = 270, South 300, West 240, from the seed). Then ask something the data can't answer and confirm you get a rejection or a no-rows message, not an invented number.</p>
+<p><b>Gate:</b> all tests pass, the golden question matches, and a fabricated-number test triggers the fallback. Commit: <code>feat: add grounded answers</code>.</p></div></details>
+<p class="key">Phase 3 and 4 gate: writes, forbidden tables, slow queries, and oversized results are stopped at the database. Generated SQL is validated before execution, and answer numbers are checked against the result.</p>
+
+<h2>Step-by-step guide: Phase 5, Conversational BI (M18 so far)</h2>
+<p class="key">Nothing in this section is verified yet.</p>
+
+<details open><summary>M18: Run the ask workflow as a LangGraph graph</summary><div class="step">
+<p><b>Decision:</b> you chose to follow the roadmap and adopt LangGraph now. My caveat stands: the flow is still a straight line, so this milestone is a <b>behavior-preserving refactor</b>, not a new feature. It is justified only by the two branches the code already has: an empty result skips the explanation step, and an ungrounded answer falls back. Both become conditional edges. If the graph doesn't help once follow-ups arrive (M19 and M20), the tag below lets you go back.</p>
+<p><b>Adds:</b> the <code>langgraph</code> dependency and a graph inside <code>service.py</code>. <b>Not yet:</b> retries, conversation memory, clarifying questions, or new endpoints. <code>main.py</code> does not change.</p>
+<ol class="flow">
+<li class="llm">write_sql</li><li class="det">check_sql</li><li class="det">execute</li><li class="llm">explain (if rows)</li><li class="det">ground</li><li class="det">no_rows (if empty)</li>
+</ol>
+<p class="key">Amber nodes call the LLM. Teal nodes are deterministic code.</p>
+<p><b>Save a known-good version first:</b></p>
+<pre><code>git status                      # must be clean
+git tag pre-langgraph</code></pre>
+<p>Add <code>langgraph&gt;=0.2</code> to <code>backend/requirements.txt</code> and run <code>pip install -r requirements-dev.txt</code>. It brings in several packages, so the Docker build will take longer.</p>
+<p>Replace <code>backend/app/bi/service.py</code> in full. Keeping it in this file means the existing tests, which patch <code>service.generate_sql</code> and <code>service.run_readonly</code>, keep working unchanged:</p>
+<pre><code>from datetime import date
+from typing import TypedDict
+
+from langgraph.graph import END, START, StateGraph
+
+from app.bi.grounding import answer_prompt, fallback_answer, is_grounded
+from app.bi.sql_guard import validate_sql
+from app.bi.text_to_sql import generate_sql
+from app.db import run_readonly
+
+
+class State(TypedDict, total=False):
+    question: str
+    today: date
+    sql: str
+    columns: list
+    rows: list
+    truncated: bool
+    draft: str
+    answer: str
+    answer_source: str
+
+
+def build_graph(generate):
+    def write_sql(state):
+        return {"sql": generate_sql(state["question"], generate, state["today"])}
+
+    def check_sql(state):
+        return {"sql": validate_sql(state["sql"])}
+
+    def execute(state):
+        return run_readonly(state["sql"])
+
+    def no_rows(state):
+        return {"answer": "The query returned no rows.", "answer_source": "fallback"}
+
+    def explain(state):
+        result = {
+            "columns": state["columns"],
+            "rows": state["rows"],
+            "truncated": state["truncated"],
+        }
+        return {"draft": generate(answer_prompt(state["question"], state["sql"], result)).strip()}
+
+    def ground(state):
+        draft = state["draft"]
+        if draft and is_grounded(draft, state["question"], state["rows"]):
+            answer, source = draft, "llm"
+        else:
+            answer, source = fallback_answer(state["columns"], state["rows"]), "fallback"
+        if state["truncated"]:
+            answer += f" Note: the result was truncated to the first {len(state['rows'])} rows."
+        return {"answer": answer, "answer_source": source}
+
+    def after_execute(state):
+        return "explain" if state["rows"] else "no_rows"
+
+    g = StateGraph(State)
+    g.add_node("write_sql", write_sql)
+    g.add_node("check_sql", check_sql)
+    g.add_node("execute", execute)
+    g.add_node("explain", explain)
+    g.add_node("ground", ground)
+    g.add_node("no_rows", no_rows)
+    g.add_edge(START, "write_sql")
+    g.add_edge("write_sql", "check_sql")
+    g.add_edge("check_sql", "execute")
+    g.add_conditional_edges("execute", after_execute, {"explain": "explain", "no_rows": "no_rows"})
+    g.add_edge("explain", "ground")
+    g.add_edge("ground", END)
+    g.add_edge("no_rows", END)
+    return g.compile()
+
+
+def answer_question(question, generate, today):
+    out = build_graph(generate).invoke({"question": question, "today": today})
+    return {
+        "question": question,
+        "sql": out["sql"],
+        "columns": out["columns"],
+        "rows": out["rows"],
+        "truncated": out["truncated"],
+        "answer": out["answer"],
+        "answer_source": out["answer_source"],
+    }</code></pre>
+<p>Design notes: no node name matches a state key, because LangGraph rejects that. The graph is built per request around the <code>generate</code> function, which is simple and cheap at this scale. Exceptions such as <code>SQLRejected</code> and <code>DBError</code> are expected to pass through unchanged, so the handlers in <code>main.py</code> still work. The test below checks that.</p>
+<p>Add one test to <code>backend/tests/test_answers.py</code> (it uses the <code>patched</code> fixture and imports <code>SQLRejected</code> from <code>app.bi.sql_guard</code>):</p>
+<pre><code>def test_rejected_sql_propagates_and_never_executes(monkeypatch):
+    monkeypatch.setattr(service, "generate_sql", lambda q, g, t: "DROP TABLE orders")
+
+    def fail(sql):
+        raise AssertionError("must not execute rejected SQL")
+
+    monkeypatch.setattr(service, "run_readonly", fail)
+    with pytest.raises(SQLRejected):
+        ask(lambda prompt: "")</code></pre>
+<p><b>Run:</b> <code>pytest</code> in <code>backend/</code> with the database up. Expect all earlier tests to pass <b>unchanged</b> plus the new one (75 if you were at 74). Then <code>docker compose up --build -d</code> and repeat the real <code>/ask</code> call. The response should have the same shape and the same numbers as before. Optional: <code>python -c "from app.bi.service import build_graph; print(build_graph(lambda p: '').get_graph().draw_mermaid())"</code> prints the graph as Mermaid text.</p>
+<p><b>If it fails:</b> an import or version error from <code>langgraph</code> means the install is missing or the Docker image wasn't rebuilt, so use <code>--build</code>. A test that passed before but fails now means the refactor changed behavior. Paste it, and don't "fix" the test. To go back at any time, run <code>git checkout pre-langgraph -- backend/app/bi/service.py backend/requirements.txt</code>.</p>
+<p><b>Gate:</b> every earlier test passes without edits, the new test passes, and a real <code>/ask</code> returns the same answer shape. Commit: <code>refactor: run the ask workflow as a LangGraph graph</code>.</p></div></details>
+<p class="key">Still to come in Phase 5: M19 conversation history and analytical state, M20 follow-up questions, M21 tables and basic charts.</p>
+
+<h2>Reference: Milestone 1 environment check</h2>
+<p>Run these and share the output. I can't see your machine, so I won't assume anything passes.</p>
+<pre><code>python3 --version    # expect 3.11 or newer
+git --version        # any recent 2.x
+
+docker --version
+docker compose version
+docker run --rm hello-world   # prints a greeting if Docker works
+
+# Does the project folder or a repo already exist?
+ls -d bi-agent 2>/dev/null || echo "no bi-agent folder yet"
+git rev-parse --is-inside-work-tree 2>/dev/null || echo "not inside a Git repo"</code></pre>
+<p>Smallest starting structure once the check is clean: a <code>bi-agent/</code> folder with <code>backend/</code>, a <code>.gitignore</code>, and a <code>README.md</code>. Nothing else yet.</p>
+</main>
+<script>
+var ST=[
+{t:"M2–M3: Backend only",a:"FastAPI with /health and /hello, plus pytest.",n:"Frontend, LLM, database.",g:"Endpoints return the expected JSON; tests pass."},
+{t:"M4–M6: Frontend",a:"Streamlit page, backend integration, config, logging, correlation IDs.",n:"Chat UI, LLM.",g:"UI shows the response; error states work; Streamlit holds no business logic."},
+{t:"M7–M9: LLM",a:"A service interface over one model provider, with timeouts and cost limits.",n:"Agents, SQL generation.",g:"Valid, invalid, and failing requests all behave correctly."},
+{t:"M10–M12: Data access",a:"Sample database, deterministic queries, read-only execution with limits.",n:"Text-to-SQL.",g:"Known aggregation matches; write attempts are refused."},
+{t:"M13–M17: BI core",a:"Metric registry, metadata, SQL generation, SQL validation, authorization, grounded answers.",n:"LangGraph, memory, charts.",g:"Golden questions pass; unsafe SQL is rejected before execution."},
+{t:"M18–M21: Conversational BI",a:"LangGraph if justified, conversation state, follow-ups, tables and charts.",n:"Auth, deployment.",g:"Follow-ups resolve; charts come from a structured spec."},
+{t:"M22–M27: Production",a:"RBAC, audit logging, evaluation set, Docker, AWS, CI/CD.",n:"Post-MVP extensions.",g:"Deployed build passes smoke tests and can roll back."}];
+var LAB={ui:["curl / pytest","Streamlit UI"],orch:["Query workflow","LangGraph workflow"]};
+var tabs=document.getElementById("tabs"),cap=document.getElementById("cap");
+function show(c){
+ var els=document.querySelectorAll("#edges path,#nodes>g,#band");
+ els.forEach(function(e){var s=+e.getAttribute("data-s");
+  e.classList.toggle("ghost",s>c);
+  var cls=e.tagName==="path"?"new":"new";
+  e.classList.toggle("new",s===c);
+  if(e.tagName==="g"&&!e.classList.contains("llm")&&e.hasAttribute("data-llm"))e.classList.add("llm");});
+ document.querySelector("#ui .lab").textContent=LAB.ui[c>=1?1:0];
+ document.querySelector("#orch .lab").textContent=LAB.orch[c>=5?1:0];
+ [].forEach.call(tabs.children,function(b,i){b.setAttribute("aria-pressed",i===c)});
+ var s=ST[c];
+ cap.innerHTML="<div><b>"+s.t+"</b></div><div><b>Added</b><p>"+s.a+"</p></div><div><b>Not yet</b><p>"+s.n+"</p></div><div><b>Gate</b><p>"+s.g+"</p></div>";
+}
+ST.forEach(function(s,i){var b=document.createElement("button");b.type="button";b.textContent=s.t.split(":")[0];b.onclick=function(){show(i)};tabs.appendChild(b)});
+show(0);
+</script>
+</body>
+</html>

@@ -36,12 +36,15 @@ def get_json(path: str, timeout: float = 5.0) -> dict:
     except ValueError as e:
         raise BackendError("Backend returned invalid JSON.") from e
 
-def post_json(path: str, payload: dict, timeout: float = 90.0) -> dict:
+def post_json(path: str, payload: dict, timeout: float = 90.0, token=None) -> dict:
+    headers = {"X-Request-ID": str(uuid.uuid4())}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     try:
         r = requests.post(
             f"{BACKEND_URL}{path}",
             json=payload,
-            headers={"X-Request-ID": str(uuid.uuid4())},
+            headers=headers,
             timeout=timeout,
         )
         r.raise_for_status()
@@ -54,3 +57,7 @@ def post_json(path: str, payload: dict, timeout: float = 90.0) -> dict:
         raise BackendError(_detail(r), r.status_code) from e
     except ValueError as e:
         raise BackendError("Backend returned invalid JSON.") from e
+
+
+def login(username, password):
+    return post_json("/auth/login", {"username": username, "password": password}, timeout=15.0)
