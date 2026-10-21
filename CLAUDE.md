@@ -6,8 +6,21 @@ A natural-language BI agent: users ask questions in plain English and get a grou
 
 - `docs/build-plan.html` is the living plan: roadmap, step-by-step milestone guides, development log, known limits. Update it whenever the plan changes, a milestone starts or finishes, a decision is made, or a new limit appears. Keep the "Last updated" line and the development log current, and label results as **seen** (output observed) or **reported** (the owner said so).
 - Edit it in place; git keeps history. Never create new `_vN` copies. The older `docs/BI Agent MVP_ incremental build plan*.html` files are historical only.
-- Update `README.md` when setup steps, configuration, API routes, roles or user-visible behavior change.
+- Update `README.md` when setup steps, configuration, API routes, roles or user-visible behavior change. Its **Features** section is the canonical list of what the project offers: add to it whenever a feature lands.
 - Update this file when conventions, layout or status change.
+
+## Test-driven development (always)
+
+Every change to behaviour follows red, green, refactor:
+
+1. **Red:** write or update the test first. Run it and confirm it fails, and fails for the expected reason (not a typo or import error in the test itself, unless the module genuinely doesn't exist yet).
+2. **Green:** write the smallest code change that makes it pass. Run the full suite, not just the new test.
+3. **Refactor:** tidy up only while every test stays green.
+
+- A bug fix starts with a test that reproduces the bug.
+- Show the owner both runs: the failing output and the passing output.
+- Never weaken, skip or delete a test to make it pass. If a test is wrong, say why before changing it.
+- Exempt: documentation-only changes and configuration with no behaviour. Scratch experiments may skip TDD but are never committed without tests.
 
 ## Working rules
 
@@ -41,6 +54,7 @@ Code changes need `--build`; `.env` or compose environment changes need the cont
 - `db.py`: `run_readonly(sql, params, max_rows, timeout_ms, role)` — the role picks the database login; read-only transaction, statement timeout, row cap.
 - `llm/`: `LLMService` interface, `openrouter.py`, `fake.py`, `budget.py`, typed errors (timeout, rate limit, config, generic).
 - `bi/`: `metrics.py` (governed metrics + deterministic builder), `schema.py` (per-role schema text), `text_to_sql.py` (prompt + extraction), `sql_guard.py` (sqlglot validator), `service.py` (LangGraph graph: rewrite → write_sql → check_sql → execute → explain → ground, or no_rows), `grounding.py`, `rewrite.py`, `chart.py`, `conversation.py`.
+- `backend/evals/`: `cases.json` (21 questions with reference SQL and expected rows, or forbidden values for safety cases) and `harness.py` (`run_case` runs a case through the real workflow; scoring ignores column order and names, matches numbers to 2 decimals). Not shipped in the Docker image.
 - `frontend/app.py`: Streamlit sign-in gate, chat, table, chart. `client.py`: `post_json`/`get_json`/`login`, raises `BackendError` with the backend's message and status.
 - `db/init/`: `01_schema`, `02_seed`, `03_roles` (bi_readonly), `04_limited_role` (bi_limited), `05_app_db` (appdb, app_rw, users), `06_audit` (audit.events, insert-only for app_rw). Run only on an empty volume.
 
@@ -69,4 +83,4 @@ Code changes need `--build`; `.env` or compose environment changes need the cont
 
 ## Status
 
-M1–M22 committed (last checked: backend 129 passed, frontend 8 passed). M23a (audit trail: `app/audit.py`, `signed_in` dependency, `audit_event` calls; tests use the `audit_events` fixture instead of the database) is committed. M23b (login throttling: `app/throttle.py`, in-memory per username, 5 failures in 15 min lock for 15 min; tests get a fresh throttle via the `fresh_login_throttle` fixture) is committed, 140 backend tests passing. M23c (JSON logs via `app/logging_setup.py`, `LOG_FORMAT=json|text`; public `GET /ready` checks both databases) is committed, 144 backend tests passing. M23 is complete. Next: M24, regression and evaluation dataset. Open suggestions not applied: a `NO_QUERY` path for non-data questions, and converting midnight timestamps to dates for chart labels.
+M1–M22 committed (last checked: backend 129 passed, frontend 8 passed). M23a (audit trail: `app/audit.py`, `signed_in` dependency, `audit_event` calls; tests use the `audit_events` fixture instead of the database) is committed. M23b (login throttling: `app/throttle.py`, in-memory per username, 5 failures in 15 min lock for 15 min; tests get a fresh throttle via the `fresh_login_throttle` fixture) is committed, 140 backend tests passing. M23c (JSON logs via `app/logging_setup.py`, `LOG_FORMAT=json|text`; public `GET /ready` checks both databases) is committed, 144 backend tests passing. M23 is complete. M24a (evaluation dataset and scoring harness, built test-first) is done: 187 backend tests passing, not yet committed. M24b (real-model runner and baseline) is next. Open suggestions not applied: a `NO_QUERY` path for non-data questions, and converting midnight timestamps to dates for chart labels.

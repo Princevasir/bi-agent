@@ -29,12 +29,46 @@ The chart type is chosen by fixed backend rules, never by the model.
 
 ## Features
 
-- Natural-language questions over a sample sales dataset, with follow-up questions.
-- SQL validation plus database-level read-only access, so generated SQL cannot change data or reach forbidden tables.
-- Sign-in with local accounts (argon2 password hashing, JWT), two roles, and private conversations.
-- Answers, SQL, tables and bar or line charts in the browser.
-- An append-only audit trail of sign-ins, questions and rejected queries, and a lockout after repeated failed sign-ins.
-- JSON logs with request IDs, a readiness check, and a token budget and timeouts for LLM calls.
+The full list of what the project offers today. Keep it current as features land.
+
+### Asking questions
+- Ask about the data in plain English in a chat; the model writes the SQL (Qwen2.5 Coder 32B through OpenRouter, or any OpenRouter model via `OPENROUTER_MODEL`).
+- Governed metric definitions (`revenue`, `order_count`) guide the model so "revenue" always means completed orders.
+- Follow-up questions ("What about August?") are rewritten into a standalone question using the conversation; the UI shows how the question was interpreted.
+- Relative dates such as "last month" are resolved from today's date.
+- Generate SQL without running it (`POST /ask/sql`).
+
+### Answers
+- A short answer sentence, the SQL that produced it, and the result table.
+- Every number in the model's sentence is checked against the result; if any number is not in the data, a plain answer built from the rows is shown instead.
+- A fixed "no matching data" message for empty results, and a note when results were cut off.
+- Automatic charts: a line chart for dates or months, a bar chart for categories, none when it wouldn't help. Chosen by fixed rules, never by the model.
+- Conversation history per user, readable through `GET /conversations/{id}`.
+
+### Safety and access control
+- Every generated query passes a validator before it runs: exactly one `SELECT`, allowed tables only, no schema-qualified names, no dangerous functions, no `SELECT INTO` or locking.
+- Queries run through a read-only database login with a 5-second timeout and a 200-row cap.
+- Two roles: `analyst` (orders and regions) and `limited` (regions only), each with its own database login, so the database refuses what the role may not read even if the validator were bypassed.
+- The model only sees the tables the user's role may see.
+- Conversations are private: another user's conversation ID returns "not found".
+
+### Accounts and sign-in
+- Local accounts with argon2id password hashing, created with a command-line tool that prompts for the password.
+- JWT sign-in tokens (60 minutes by default); role and active status are re-read from the database on every request, so deactivating a user takes effect immediately.
+- The same error for a wrong username or a wrong password.
+- Lockout after 5 failed sign-ins within 15 minutes, for 15 minutes.
+- Sign-in form, sign-out button and session-expired handling in the UI; the token never reaches the browser.
+
+### Reliability and operations
+- Append-only audit trail of sign-ins, failed and locked sign-ins, questions (text, SQL, row count), rejected queries and access denials. Passwords, tokens, results and answers are never recorded.
+- One-line JSON logs with request ID, user, path, status and time; `X-Request-ID` is accepted and returned on every response.
+- `GET /health` (liveness) and `GET /ready` (both databases reachable).
+- Timeouts, an output-token cap and a total token budget for model calls; model and database failures return clear, generic errors.
+- The whole stack starts with one `docker compose up`.
+
+### Testing and quality
+- Backend and frontend test suites; tests use a scripted model, so they are free and repeatable.
+- An evaluation dataset of 21 questions with known answers, including follow-ups, an empty result, four safety probes and one tracked known gap, with a scoring harness that checks the real workflow's results rather than its SQL text. (A runner for the real model and a saved baseline are coming next.)
 
 ## Prerequisites
 
@@ -149,6 +183,8 @@ python3 -m venv .venv
 
 Tests never call the real LLM: they use a scripted fake model (`backend/tests/routed_llm.py`). Integration tests connect to the Compose database on host port 5433.
 
+The evaluation dataset lives in `backend/evals/cases.json` and the scoring code in `backend/evals/harness.py`; `tests/test_evals.py` checks that every expected answer is right and that the scoring rules behave.
+
 ## Project layout
 
 ```
@@ -163,6 +199,7 @@ backend/
     llm/             LLM interface, OpenRouter and fake providers, token budget
     bi/              metrics, schema, text-to-SQL, SQL validator, workflow graph,
                      grounding, follow-up rewrite, chart rules, conversation store
+  evals/             evaluation dataset (cases.json) and scoring harness
   tests/
 frontend/
   app.py             Streamlit sign-in and chat
