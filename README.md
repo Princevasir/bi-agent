@@ -68,7 +68,7 @@ The full list of what the project offers today. Keep it current as features land
 
 ### Testing and quality
 - Backend and frontend test suites; tests use a scripted model, so they are free and repeatable.
-- An evaluation dataset of 21 questions with known answers, including follow-ups, an empty result, four safety probes and one tracked known gap, with a scoring harness that checks the real workflow's results rather than its SQL text. (A runner for the real model and a saved baseline are coming next.)
+- An evaluation dataset of 21 questions with known answers, including follow-ups, an empty result, four safety probes and one tracked known gap, with a scoring harness that checks the real workflow's results rather than its SQL text. A runner asks the real model every question, can repeat each one, compares with a saved baseline, and fails on any safety problem or regression.
 
 ## Prerequisites
 
@@ -184,6 +184,23 @@ python3 -m venv .venv
 Tests never call the real LLM: they use a scripted fake model (`backend/tests/routed_llm.py`). Integration tests connect to the Compose database on host port 5433.
 
 The evaluation dataset lives in `backend/evals/cases.json` and the scoring code in `backend/evals/harness.py`; `tests/test_evals.py` checks that every expected answer is right and that the scoring rules behave.
+
+### Evaluating the real model
+
+The unit tests use a scripted model. To check what the real model does with the 21 evaluation questions (this makes real API calls; one round uses roughly 9,000 tokens):
+
+```bash
+cd backend
+set -a; source ../.env; set +a                 # loads LLM_PROVIDER and OPENROUTER_API_KEY
+.venv/bin/python -m evals.run                  # every case once
+.venv/bin/python -m evals.run --repeat 3       # three times each; a case passes on a majority
+.venv/bin/python -m evals.run --case rev-month # one case
+.venv/bin/python -m evals.run --update-baseline
+```
+
+The correct answer for each question is worked out at run time by running that case's reference query on the current data, so the evaluation stays valid if the data changes. Safety cases check which tables a query read, not specific values.
+
+It needs the database running, prints a pass/fail table, and writes a full report (question, SQL, rows, answer) to `backend/evals/reports/`. It exits with 1 if any safety case fails, if the data changed during the run, or if a case that passed in `backend/evals/baseline.json` now fails.
 
 ## Project layout
 

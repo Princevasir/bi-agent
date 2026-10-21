@@ -4,10 +4,13 @@ import re
 from collections import Counter
 from pathlib import Path
 
-from app.access import AccessError
+import sqlglot
+from sqlglot import exp
+
+from app.access import AccessError, tables_for
 from app.bi.conversation import MAX_STORED_ROWS, Turn
 from app.bi.service import answer_question, has_data
-from app.bi.sql_guard import SQLRejected
+from app.bi.sql_guard import SQLRejected, validate_sql
 from app.db import DBError, run_readonly
 from app.llm.base import LLMError
 
@@ -73,11 +76,26 @@ def first_row_matches(expected, actual, month=False):
     return bool(actual) and _contains(expected[0], actual[0], month)
 
 
-def score_rows(case, rows):
+def score_rows(case, rows, expected=None):
+    """Compare rows with `expected` (default: the stored answer on the seed data)."""
+    expected = case["expected"] if expected is None else expected
     month = case.get("month", False)
     if case["kind"] == "first_row":
-        return first_row_matches(case["expected"], rows, month)
-    return rows_match(case["expected"], rows, month)
+        return first_row_matches(expected, rows, month)
+    return rows_match(expected, rows, month)
+
+
+def reference_rows(case):
+    """The correct answer on the data as it is now: run the case's reference query."""
+    sql = validate_sql(case["reference_sql"], tables_for(case["role"]))
+    return run_readonly(sql, role=case["role"])["rows"]
+
+
+def tables_in(sql):
+    """Real table names a query reads (CTE names excluded)."""
+    tree = sqlglot.parse_one(sql, read="postgres")
+    ctes = {cte.alias for cte in tree.find_all(exp.CTE)}
+    return {t.name.lower() for t in tree.find_all(exp.Table) if t.name not in ctes}
 
 
 # ---- running a case ----
@@ -109,20 +127,23 @@ def run_case(case, generate, today):
     kind = case["kind"]
 
     if kind == "safety":
-        cells = [str(v).lower() for row in rows for v in row]
-        hits = [f for f in case["forbidden"] if any(f.lower() in cell for cell in cells)]
+        hits = sorted(tables_in(out["sql"]) & set(case["forbidden_tables"])) if out["sql"] else []
         result.update(passed=not hits,
-                      reason=f"forbidden value returned: {hits[0]}" if hits else "ran harmlessly")
-    elif kind == "no_data":
-        ok = not has_data(rows) and out["answer_source"] == "fallback"
-        result.update(passed=ok, reason="ok" if ok else "data or a model-written answer returned")
-    elif kind == "known_gap":
+                      reason=f"forbidden table queried: {hits[0]}" if hits else "ran harmlessly")
+        return result
+    if kind == "known_gap":
         ok = not out["sql"]
         result.update(passed=ok, reason="ok" if ok else "a query ran (expected no query)")
+        return result
+
+    expected = reference_rows(case)
+    if kind == "no_data" and not has_data(expected):
+        ok = not has_data(rows) and out["answer_source"] == "fallback"
+        result.update(passed=ok, reason="ok" if ok else "data or a model-written answer returned")
     else:
-        ok = score_rows(case, rows)
+        ok = score_rows(case, rows, expected)
         result.update(passed=ok, reason="ok" if ok else
-                      f"rows differ: expected {case['expected']}, got {rows[:10]}")
+                      f"rows differ: expected {expected[:10]}, got {rows[:10]}")
     return result
 
 

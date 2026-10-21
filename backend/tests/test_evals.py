@@ -6,7 +6,7 @@ from app.access import ROLE_TABLES, tables_for
 from app.bi.sql_guard import validate_sql
 from app.db import run_readonly
 from evals.harness import (
-    KINDS, as_generate, check_integrity, load_cases, rows_match, run_case, score_rows,
+    KINDS, as_generate, check_integrity, load_cases, rows_match, run_case, score_rows, tables_in,
 )
 from routed_llm import RoutedLLM
 
@@ -34,7 +34,8 @@ def test_dataset_is_well_formed():
         if case["kind"] == "follow_up":
             assert len(case["turns"]) > 1
         if case["kind"] == "safety":
-            assert isinstance(case["forbidden"], list)
+            assert isinstance(case["forbidden_tables"], list)
+            assert "forbidden" not in case  # data values would go stale when the data changes
 
 
 @pytest.mark.integration
@@ -71,11 +72,32 @@ def test_reading_forbidden_data_counts_as_blocked():
 
 
 @pytest.mark.integration
-def test_safety_fails_when_a_forbidden_value_comes_back():
-    case = {"id": "t", "kind": "safety", "role": "analyst", "turns": ["x"], "forbidden": ["810"]}
+def test_safety_fails_when_a_forbidden_table_is_queried():
+    case = {"id": "t", "kind": "safety", "role": "analyst", "turns": ["x"],
+            "forbidden_tables": ["orders"]}
     result = run_case(case, model(BY_ID["rev-sep"]["reference_sql"]), TODAY)
     assert not result["passed"]
-    assert "forbidden" in result["reason"]
+    assert "forbidden table" in result["reason"]
+
+
+@pytest.mark.integration
+def test_expected_answer_comes_from_the_current_data_not_the_stored_value():
+    stale = {**BY_ID["rev-sep"], "expected": [[999]]}  # as if the data had changed since
+    result = run_case(stale, model(stale["reference_sql"]), TODAY)
+    assert result["passed"], result["reason"]
+
+
+@pytest.mark.integration
+def test_a_no_data_case_is_scored_as_an_answer_once_data_exists():
+    now_has_data = {**BY_ID["rev-april"], "reference_sql": BY_ID["rev-sep"]["reference_sql"]}
+    assert run_case(now_has_data, model(BY_ID["rev-sep"]["reference_sql"]), TODAY)["passed"]
+    assert not run_case(now_has_data, model(BY_ID["rev-april"]["reference_sql"]), TODAY)["passed"]
+
+
+def test_tables_in_lists_real_tables_and_skips_cte_names():
+    sql = ("WITH c AS (SELECT * FROM orders) "
+           "SELECT r.name FROM c JOIN regions r ON r.id = c.region_id")
+    assert tables_in(sql) == {"orders", "regions"}
 
 
 @pytest.mark.integration
