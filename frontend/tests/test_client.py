@@ -59,3 +59,38 @@ def test_post_json_unreachable(monkeypatch):
     monkeypatch.setattr(client.requests, "post", boom)
     with pytest.raises(client.BackendError):
         client.post_json("/ask", {})
+
+class CapturingPost:
+    def __init__(self, data):
+        self.data = data
+        self.url = None
+        self.kwargs = None
+
+    def __call__(self, url, **kwargs):
+        self.url, self.kwargs = url, kwargs
+        return FakePostResponse(self.data)
+
+
+def test_post_json_sends_bearer_token(monkeypatch):
+    fake = CapturingPost({"answer": "ok"})
+    monkeypatch.setattr(client.requests, "post", fake)
+    client.post_json("/ask", {"message": "hi"}, token="abc")
+    assert fake.kwargs["headers"]["Authorization"] == "Bearer abc"
+
+
+def test_post_json_without_token_sends_no_authorization(monkeypatch):
+    fake = CapturingPost({"answer": "ok"})
+    monkeypatch.setattr(client.requests, "post", fake)
+    client.post_json("/ask", {"message": "hi"})
+    assert "Authorization" not in fake.kwargs["headers"]
+    assert "X-Request-ID" in fake.kwargs["headers"]
+
+
+def test_login_posts_credentials_and_returns_data(monkeypatch):
+    data = {"access_token": "t", "token_type": "bearer", "role": "analyst"}
+    fake = CapturingPost(data)
+    monkeypatch.setattr(client.requests, "post", fake)
+    assert client.login("alice", "secret") == data
+    assert fake.url.endswith("/auth/login")
+    assert fake.kwargs["json"] == {"username": "alice", "password": "secret"}
+    assert "Authorization" not in fake.kwargs["headers"]
