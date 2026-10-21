@@ -14,9 +14,17 @@ os.environ.setdefault("DATABASE_URL_LIMITED", "postgresql://bi_limited:limited_d
 from app.appdb import User  # noqa: E402
 from app.auth import current_user  # noqa: E402
 from app.main import app  # noqa: E402
+from app import audit  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
 def signed_in_analyst():
     app.dependency_overrides[current_user] = lambda: User(username="test-analyst", role="analyst")
     yield
+
+
+@pytest.fixture(autouse=True)
+def audit_events(monkeypatch):
+    events = []
+    monkeypatch.setattr(audit, "_write", events.append)
+    return events

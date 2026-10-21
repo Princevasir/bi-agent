@@ -41,7 +41,7 @@ Code changes need `--build`; `.env` or compose environment changes need the cont
 - `llm/`: `LLMService` interface, `openrouter.py`, `fake.py`, `budget.py`, typed errors (timeout, rate limit, config, generic).
 - `bi/`: `metrics.py` (governed metrics + deterministic builder), `schema.py` (per-role schema text), `text_to_sql.py` (prompt + extraction), `sql_guard.py` (sqlglot validator), `service.py` (LangGraph graph: rewrite → write_sql → check_sql → execute → explain → ground, or no_rows), `grounding.py`, `rewrite.py`, `chart.py`, `conversation.py`.
 - `frontend/app.py`: Streamlit sign-in gate, chat, table, chart. `client.py`: `post_json`/`get_json`/`login`, raises `BackendError` with the backend's message and status.
-- `db/init/`: `01_schema`, `02_seed`, `03_roles` (bi_readonly), `04_limited_role` (bi_limited), `05_app_db` (appdb, app_rw, users). Run only on an empty volume.
+- `db/init/`: `01_schema`, `02_seed`, `03_roles` (bi_readonly), `04_limited_role` (bi_limited), `05_app_db` (appdb, app_rw, users), `06_audit` (audit.events, insert-only for app_rw). Run only on an empty volume.
 
 ## Decisions to preserve
 
@@ -68,4 +68,4 @@ Code changes need `--build`; `.env` or compose environment changes need the cont
 
 ## Status
 
-M1–M22 committed (last checked: backend 129 passed, frontend 8 passed). M23 (audit trail, login throttling, structured logs and readiness) is planned in `docs/build-plan.html` and not started. Open suggestions not applied: a `NO_QUERY` path for non-data questions, and converting midnight timestamps to dates for chart labels.
+M1–M22 committed (last checked: backend 129 passed, frontend 8 passed). M23a (audit trail: `app/audit.py`, `signed_in` dependency, `audit_event` calls; tests use the `audit_events` fixture instead of the database) is committed, 135 backend tests passing. M23b (login throttling) and M23c (JSON logs, `/ready`) are planned in `docs/build-plan.html`. Open suggestions not applied: a `NO_QUERY` path for non-data questions, and converting midnight timestamps to dates for chart labels.

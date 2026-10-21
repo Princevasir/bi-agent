@@ -10,6 +10,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from app import audit
 from app.access import AccessError
 from app.appdb import User, get_user
 from app.auth import AuthConfigError, authenticate, create_token, current_user
@@ -61,12 +62,30 @@ def _rid(request: Request):
     return getattr(request.state, "request_id", "-")
 
 
+def signed_in(request: Request, user: User = Depends(current_user)):
+    request.state.user = user
+    return user
+
+
+def audit_event(request, event, status_code, username=None, **detail):
+    user = getattr(request.state, "user", None)
+    audit.record(
+        event,
+        request_id=_rid(request),
+        username=username or (user.username if user else None),
+        role=user.role if user else None,
+        status_code=status_code,
+        **detail,
+    )
+
+
 @app.exception_handler(LLMError)
 async def llm_error_handler(request: Request, exc: LLMError):
     for cls, status, message in LLM_ERRORS:
         if isinstance(exc, cls):
             logger.warning("request_id=%s llm_error=%s detail=%s",
                            _rid(request), type(exc).__name__, exc)
+            audit_event(request, "llm_error", status, error=type(exc).__name__)
             return JSONResponse(status_code=status, content={"detail": message})
 
 
@@ -78,12 +97,14 @@ async def db_error_handler(request: Request, exc: DBError):
         status, message = 503, "The database is unavailable."
     logger.warning("request_id=%s db_error=%s detail=%s cause=%r",
                    _rid(request), type(exc).__name__, exc, exc.__cause__)
+    audit_event(request, "db_error", status, error=type(exc).__name__)
     return JSONResponse(status_code=status, content={"detail": message})
 
 
 @app.exception_handler(SQLRejected)
 async def sql_rejected_handler(request: Request, exc: SQLRejected):
     logger.warning("request_id=%s sql_rejected=%s", _rid(request), exc)
+    audit_event(request, "sql_rejected", 422, reason=str(exc))
     return JSONResponse(status_code=422, content={"detail": "The generated query was rejected."})
 
 
@@ -96,6 +117,7 @@ async def auth_config_handler(request: Request, exc: AuthConfigError):
 @app.exception_handler(AccessError)
 async def access_error_handler(request: Request, exc: AccessError):
     logger.warning("request_id=%s access_denied=%s", _rid(request), exc)
+    audit_event(request, "access_denied", 403, reason=str(exc))
     return JSONResponse(status_code=403, content={"detail": "Access denied."})
 
 
@@ -145,17 +167,21 @@ def hello() -> dict[str, str]:
 
 
 @app.post("/auth/login")
-def login(body: LoginRequest):
-    user = get_user(body.username)
+def login(body: LoginRequest, request: Request):
+    name = body.username.strip().lower()
+    user = get_user(name)
     if not authenticate(user, body.password):
+        audit_event(request, "login_failure", 401, username=name)
         raise HTTPException(status_code=401, detail="Invalid username or password.")
+    request.state.user = user
+    audit_event(request, "login_success", 200)
     return {"access_token": create_token(user.username, user.role),
             "token_type": "bearer", "role": user.role}
 
 
 # ---- protected routes ----
 
-@app.post("/chat", response_model=ChatResponse, dependencies=[Depends(current_user)])
+@app.post("/chat", response_model=ChatResponse, dependencies=[Depends(signed_in)])
 def chat(body: ChatRequest, request: Request,
          llm: LLMService = Depends(get_llm)) -> ChatResponse:
     result_text = make_generate(llm, request)(body.message)
@@ -163,26 +189,27 @@ def chat(body: ChatRequest, request: Request,
 
 
 @app.get("/db/ping")
-def db_ping(user: User = Depends(current_user)):
+def db_ping(user: User = Depends(signed_in)):
     return run_readonly("SELECT 1 AS result", role=user.role)
 
 
 @app.get("/schema")
-def schema(user: User = Depends(current_user)):
+def schema(user: User = Depends(signed_in)):
     return get_schema(user.role)
 
 
 @app.post("/ask/sql")
 def ask_sql(body: ChatRequest, request: Request,
-            user: User = Depends(current_user),
+            user: User = Depends(signed_in),
             llm: LLMService = Depends(get_llm)):
     sql = generate_sql(body.message, make_generate(llm, request), date.today(), role=user.role)
+    audit_event(request, "ask_sql", 200, question=body.message, sql=sql)
     return {"question": body.message, "sql": sql}
 
 
 @app.post("/ask")
 def ask(body: AskRequest, request: Request,
-        user: User = Depends(current_user),
+        user: User = Depends(signed_in),
         llm: LLMService = Depends(get_llm)):
     if body.conversation_id is None:
         cid, history = store.new_id(), []
@@ -200,11 +227,16 @@ def ask(body: AskRequest, request: Request,
         rows=out["rows"][:MAX_STORED_ROWS],
         answer=out["answer"],
     ))
+    audit_event(request, "ask", 200,
+                conversation_id=cid, question=body.message,
+                interpreted_as=out["interpreted_as"], sql=out["sql"],
+                row_count=len(out["rows"]), truncated=out["truncated"],
+                answer_source=out["answer_source"])
     return {**out, "conversation_id": cid}
 
 
 @app.get("/conversations/{conversation_id}")
-def get_conversation(conversation_id: UUID, user: User = Depends(current_user)):
+def get_conversation(conversation_id: UUID, user: User = Depends(signed_in)):
     cid = str(conversation_id)
     turns = store.get(conv_key(user, cid))
     if turns is None:
