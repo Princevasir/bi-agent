@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app import audit
 from app.access import AccessError
 from app.appdb import User, get_user
+from app.appdb import ping as appdb_ping
 from app.auth import AuthConfigError, authenticate, create_token, current_user
 from app.bi.conversation import MAX_STORED_ROWS, ConversationStore, Turn
 from app.bi.schema import get_schema
@@ -25,12 +26,10 @@ from app.llm.base import (
     LLMConfigError, LLMError, LLMRateLimitError, LLMService, LLMTimeoutError,
 )
 from app.llm.budget import TokenBudget
+from app.logging_setup import configure_logging
 from app.throttle import LoginThrottle
 
-logging.basicConfig(
-    level=os.getenv("LOG_LEVEL", "INFO"),
-    format="%(asctime)s %(levelname)s %(message)s",
-)
+configure_logging()
 logger = logging.getLogger("bi_agent")
 
 app = FastAPI(title="BI Agent API")
@@ -55,8 +54,12 @@ async def add_request_id(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
     ms = (time.perf_counter() - start) * 1000
-    logger.info("request_id=%s %s %s -> %s %.1fms", request_id,
-                request.method, request.url.path, response.status_code, ms)
+    user = getattr(request.state, "user", None)
+    logger.info("request", extra={
+        "request_id": request_id, "method": request.method, "path": request.url.path,
+        "status": response.status_code, "ms": round(ms, 1),
+        "username": user.username if user else None,
+    })
     return response
 
 
@@ -146,8 +149,11 @@ def make_generate(llm, request):
         budget.check()
         result = llm.generate(prompt)
         budget.record(result.input_tokens + result.output_tokens)
-        logger.info("request_id=%s llm_tokens in=%s out=%s",
-                    request.state.request_id, result.input_tokens, result.output_tokens)
+        logger.info("llm_tokens", extra={
+            "request_id": request.state.request_id,
+            "input_tokens": result.input_tokens,
+            "output_tokens": result.output_tokens,
+        })
         return result.text
     return generate
 
@@ -166,6 +172,21 @@ def health() -> dict[str, str]:
 @app.get("/hello")
 def hello() -> dict[str, str]:
     return {"message": "Hello, BI Agent!"}
+
+
+@app.get("/ready")
+def ready():
+    checks = {}
+    for name, check in (("analytics", lambda: run_readonly("SELECT 1")),
+                        ("appdb", appdb_ping)):
+        try:
+            check()
+            checks[name] = "ok"
+        except DBError:
+            checks[name] = "unavailable"
+    ok = all(v == "ok" for v in checks.values())
+    return JSONResponse(status_code=200 if ok else 503,
+                        content={"status": "ready" if ok else "not ready", "checks": checks})
 
 
 @app.post("/auth/login")

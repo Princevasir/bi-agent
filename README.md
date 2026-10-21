@@ -33,7 +33,8 @@ The chart type is chosen by fixed backend rules, never by the model.
 - SQL validation plus database-level read-only access, so generated SQL cannot change data or reach forbidden tables.
 - Sign-in with local accounts (argon2 password hashing, JWT), two roles, and private conversations.
 - Answers, SQL, tables and bar or line charts in the browser.
-- Request IDs on every call, token budget and timeouts for LLM calls.
+- An append-only audit trail of sign-ins, questions and rejected queries, and a lockout after repeated failed sign-ins.
+- JSON logs with request IDs, a readiness check, and a token budget and timeouts for LLM calls.
 
 ## Prerequisites
 
@@ -93,12 +94,13 @@ Governed metrics: `revenue` (sum of completed order amounts) and `order_count` (
 
 ## API
 
-All routes except the first three need `Authorization: Bearer <token>` from `/auth/login`.
+All routes except the first four need `Authorization: Bearer <token>` from `/auth/login`.
 
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/health` | Liveness check (used by Docker) |
 | GET | `/hello` | Smoke test |
+| GET | `/ready` | Readiness: 200 when both databases answer, 503 otherwise |
 | POST | `/auth/login` | `{"username", "password"}` → access token and role |
 | POST | `/ask` | `{"message", "conversation_id"?}` → answer, SQL, rows, chart, conversation ID |
 | POST | `/ask/sql` | Generate SQL for a question without running it |
@@ -124,6 +126,7 @@ Set in `.env`; defaults come from `docker-compose.yml`.
 | `LLM_MAX_OUTPUT_TOKENS` | 512 | Per LLM call |
 | `LLM_TOKEN_BUDGET` | 50000 | Total tokens per backend process before LLM calls are refused |
 | `LOG_LEVEL` | `INFO` | Backend log level |
+| `LOG_FORMAT` | `json` | `json` (one JSON object per line) or `text` for easier local reading |
 
 The database URLs in `docker-compose.yml` use local development passwords. Replace them with real secrets for any shared or deployed environment.
 
@@ -182,6 +185,6 @@ docker-compose.yml
 
 ## Status and limits
 
-Milestones 1 to 22 are done: the core question flow, follow-ups, charts, sign-in and roles. Next are audit logging and monitoring, an evaluation dataset, production images, AWS deployment and CI/CD. See `docs/build-plan.html` for details.
+Milestones 1 to 23 are done: the core question flow, follow-ups, charts, sign-in and roles, audit trail, sign-in throttling, JSON logs and a readiness check. Next are an evaluation dataset, production images, AWS deployment and CI/CD. See `docs/build-plan.html` for details.
 
 Known limits today: conversations and the token budget are kept in memory and reset on restart; there is no TLS outside AWS; greetings such as "hello" still trigger a guessed query; and result rows are sent to the model provider to write the explanation, so check its data policy before using real business data.

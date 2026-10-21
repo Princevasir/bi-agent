@@ -44,3 +44,10 @@ def create_user(username, password_hash, role):
             )
     except psycopg.Error as e:
         raise DBError("Database error.") from e
+
+def ping():
+    try:
+        with psycopg.connect(_url(), connect_timeout=3) as conn:
+            conn.execute("SELECT 1")
+    except psycopg.Error as e:
+        raise DBError("Database error.") from e

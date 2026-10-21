@@ -35,6 +35,7 @@ Code changes need `--build`; `.env` or compose environment changes need the cont
 
 ## Architecture
 
+- Logs are one JSON object per line: log with a short message and `extra={...}` fields (`request_id`, `username`, ...), not formatted strings, for anything worth searching.
 - `backend/app/main.py`: routes, exception handlers (each maps to a generic client message; details go to logs with the request ID), request-ID middleware, `make_generate` (token budget + logging around every LLM call), `conv_key`.
 - `auth.py` (argon2, JWT HS256, `current_user`), `appdb.py` (users table in `appdb`), `cli.py` (create-user), `access.py` (`ROLE_TABLES`, `ROLE_DB_ENV`, `AccessError`).
 - `db.py`: `run_readonly(sql, params, max_rows, timeout_ms, role)` — the role picks the database login; read-only transaction, statement timeout, row cap.
@@ -68,4 +69,4 @@ Code changes need `--build`; `.env` or compose environment changes need the cont
 
 ## Status
 
-M1–M22 committed (last checked: backend 129 passed, frontend 8 passed). M23a (audit trail: `app/audit.py`, `signed_in` dependency, `audit_event` calls; tests use the `audit_events` fixture instead of the database) is committed. M23b (login throttling: `app/throttle.py`, in-memory per username, 5 failures in 15 min lock for 15 min; tests get a fresh throttle via the `fresh_login_throttle` fixture) is committed, 140 backend tests passing. M23c (JSON logs, `/ready`) are planned in `docs/build-plan.html`. Open suggestions not applied: a `NO_QUERY` path for non-data questions, and converting midnight timestamps to dates for chart labels.
+M1–M22 committed (last checked: backend 129 passed, frontend 8 passed). M23a (audit trail: `app/audit.py`, `signed_in` dependency, `audit_event` calls; tests use the `audit_events` fixture instead of the database) is committed. M23b (login throttling: `app/throttle.py`, in-memory per username, 5 failures in 15 min lock for 15 min; tests get a fresh throttle via the `fresh_login_throttle` fixture) is committed, 140 backend tests passing. M23c (JSON logs via `app/logging_setup.py`, `LOG_FORMAT=json|text`; public `GET /ready` checks both databases) is committed, 144 backend tests passing. M23 is complete. Next: M24, regression and evaluation dataset. Open suggestions not applied: a `NO_QUERY` path for non-data questions, and converting midnight timestamps to dates for chart labels.
