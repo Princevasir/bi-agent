@@ -30,8 +30,9 @@ def show(msg):
     st.write(msg["answer"])
     if msg.get("interpreted_as") and msg["interpreted_as"] != msg["question"]:
         st.caption(f"Interpreted as: {msg['interpreted_as']}")
-    with st.expander("SQL"):
-        st.code(msg["sql"], language="sql")
+    if msg.get("sql"):
+        with st.expander("SQL"):
+            st.code(msg["sql"], language="sql")
     if msg["rows"]:
         df = pd.DataFrame(msg["rows"], columns=msg["columns"])
         st.dataframe(df, hide_index=True)

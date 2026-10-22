@@ -8,10 +8,13 @@ from app.bi.chart import build_chart_spec
 from app.bi.grounding import answer_prompt, fallback_answer, is_grounded
 from app.bi.rewrite import rewrite_prompt
 from app.bi.sql_guard import validate_sql
-from app.bi.text_to_sql import generate_sql
+from app.bi.text_to_sql import generate_sql, is_no_query
 from app.db import run_readonly
 
 MAX_QUESTION_CHARS = 500
+NO_QUERY_ANSWER = ("I can only answer questions about the data you have access to, "
+                   "and I can't change data. "
+                   'Try something like "What was revenue by region in September 2026?"')
 
 
 class State(TypedDict, total=False):
@@ -47,6 +50,10 @@ def build_graph(generate):
         question = state.get("standalone") or state["question"]
         return {"sql": generate_sql(question, generate, state["today"], role=state["role"])}
 
+    def declined(state):
+        return {"sql": "", "columns": [], "rows": [], "truncated": False,
+                "answer": NO_QUERY_ANSWER, "answer_source": "fallback"}
+
     def check_sql(state):
         return {"sql": validate_sql(state["sql"], tables_for(state["role"]))}
 
@@ -80,6 +87,9 @@ def build_graph(generate):
     def at_start(state):
         return "rewrite" if state.get("history") else "write_sql"
 
+    def after_write(state):
+        return "declined" if is_no_query(state["sql"]) else "check_sql"
+
     def after_execute(state):
         return "explain" if has_data(state["rows"]) else "no_rows"
 
@@ -91,9 +101,12 @@ def build_graph(generate):
     g.add_node("explain", explain)
     g.add_node("ground", ground)
     g.add_node("no_rows", no_rows)
+    g.add_node("declined", declined)
     g.add_conditional_edges(START, at_start, {"rewrite": "rewrite", "write_sql": "write_sql"})
     g.add_edge("rewrite", "write_sql")
-    g.add_edge("write_sql", "check_sql")
+    g.add_conditional_edges("write_sql", after_write,
+                            {"declined": "declined", "check_sql": "check_sql"})
+    g.add_edge("declined", END)
     g.add_edge("check_sql", "execute")
     g.add_conditional_edges(
         "execute", after_execute, {"explain": "explain", "no_rows": "no_rows"}

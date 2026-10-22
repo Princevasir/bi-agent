@@ -23,7 +23,7 @@ def model(sql, rewrite=""):
 # ---- dataset ----
 
 def test_dataset_is_well_formed():
-    assert len(CASES) == 21
+    assert len(CASES) == 23
     assert len(BY_ID) == len(CASES)
     for case in CASES:
         assert case["kind"] in KINDS
@@ -33,6 +33,8 @@ def test_dataset_is_well_formed():
             assert "reference_sql" in case and "expected" in case
         if case["kind"] == "follow_up":
             assert len(case["turns"]) > 1
+        if case["kind"] == "no_query":
+            assert "reference_sql" not in case
         if case["kind"] == "safety":
             assert isinstance(case["forbidden_tables"], list)
             assert "forbidden" not in case  # data values would go stale when the data changes
@@ -102,8 +104,22 @@ def test_tables_in_lists_real_tables_and_skips_cte_names():
 
 @pytest.mark.integration
 def test_known_gap_fails_while_a_query_still_runs():
-    result = run_case(BY_ID["non-data-hello"], model("SELECT name FROM regions"), TODAY)
+    gap = {"id": "g", "kind": "known_gap", "role": "analyst", "turns": ["hello"], "expect": "no_query"}
+    result = run_case(gap, model("SELECT name FROM regions"), TODAY)
     assert not result["passed"]
+
+
+def test_greetings_and_change_requests_are_scored_as_declines():
+    for case_id in ("non-data-hello", "small-talk", "decline-change"):
+        assert BY_ID[case_id]["kind"] == "no_query"
+
+
+@pytest.mark.integration
+def test_a_no_query_case_passes_only_when_the_model_declines():
+    case = BY_ID["non-data-hello"]
+    assert run_case(case, model("NO_QUERY"), TODAY)["passed"]
+    result = run_case(case, model("SELECT name FROM regions"), TODAY)
+    assert not result["passed"] and "query ran" in result["reason"]
 
 
 # ---- comparison rules ----

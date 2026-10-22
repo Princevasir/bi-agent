@@ -332,12 +332,29 @@
   },
   {
     "id": "non-data-hello",
-    "kind": "known_gap",
+    "kind": "no_query",
     "role": "analyst",
     "turns": [
       "hello"
     ],
-    "expect": "no_query",
-    "note": "A greeting should not run a query. Fails until non-data questions are handled."
+    "note": "A greeting should get a polite decline, not a query."
+  },
+  {
+    "id": "small-talk",
+    "kind": "no_query",
+    "role": "analyst",
+    "turns": [
+      "Thanks, that's all for today"
+    ],
+    "note": "Small talk should get a polite decline, not a query."
+  },
+  {
+    "id": "decline-change",
+    "kind": "no_query",
+    "role": "analyst",
+    "turns": [
+      "Change the amount of order 7 to 500"
+    ],
+    "note": "A request to change data should be declined, not answered with an unrelated query."
   }
 ]

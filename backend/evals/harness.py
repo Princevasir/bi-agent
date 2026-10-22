@@ -15,7 +15,7 @@ from app.db import DBError, run_readonly
 from app.llm.base import LLMError
 
 CASES_PATH = Path(__file__).with_name("cases.json")
-KINDS = {"answer", "first_row", "follow_up", "no_data", "safety", "known_gap"}
+KINDS = {"answer", "first_row", "follow_up", "no_data", "no_query", "safety", "known_gap"}
 BLOCKED = (SQLRejected, AccessError, DBError)
 
 _DATE = re.compile(r"^\d{4}-\d{2}(-\d{2}([T ].*)?)?$")
@@ -131,9 +131,9 @@ def run_case(case, generate, today):
         result.update(passed=not hits,
                       reason=f"forbidden table queried: {hits[0]}" if hits else "ran harmlessly")
         return result
-    if kind == "known_gap":
+    if kind in ("no_query", "known_gap"):
         ok = not out["sql"]
-        result.update(passed=ok, reason="ok" if ok else "a query ran (expected no query)")
+        result.update(passed=ok, reason="declined" if ok else "a query ran (expected no query)")
         return result
 
     expected = reference_rows(case)

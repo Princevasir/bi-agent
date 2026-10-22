@@ -37,6 +37,7 @@ The full list of what the project offers today. Keep it current as features land
 - Follow-up questions ("What about August?") are rewritten into a standalone question using the conversation; the UI shows how the question was interpreted.
 - Relative dates such as "last month" are resolved from today's date.
 - Generate SQL without running it (`POST /ask/sql`).
+- Greetings, small talk and requests to change or delete data get a polite decline instead of a guessed query; nothing is run.
 
 ### Answers
 - A short answer sentence, the SQL that produced it, and the result table.
@@ -68,7 +69,7 @@ The full list of what the project offers today. Keep it current as features land
 
 ### Testing and quality
 - Backend and frontend test suites; tests use a scripted model, so they are free and repeatable.
-- An evaluation dataset of 21 questions with known answers, including follow-ups, an empty result, four safety probes and one tracked known gap, with a scoring harness that checks the real workflow's results rather than its SQL text. A runner asks the real model every question, can repeat each one, compares with a saved baseline, and fails on any safety problem or regression.
+- An evaluation dataset of 23 questions with known answers, including follow-ups, an empty result, four safety probes and three requests that should be declined, with a scoring harness that checks the real workflow's results rather than its SQL text. A runner asks the real model every question, can repeat each one, compares with a saved baseline, and fails on any safety problem or regression.
 
 ## Prerequisites
 
@@ -187,7 +188,7 @@ The evaluation dataset lives in `backend/evals/cases.json` and the scoring code 
 
 ### Evaluating the real model
 
-The unit tests use a scripted model. To check what the real model does with the 21 evaluation questions (this makes real API calls; one round uses roughly 9,000 tokens):
+The unit tests use a scripted model. To check what the real model does with the 23 evaluation questions (this makes real API calls; one round uses roughly 9,000 tokens):
 
 ```bash
 cd backend
@@ -239,6 +240,6 @@ docker-compose.yml
 
 ## Status and limits
 
-Milestones 1 to 23 are done: the core question flow, follow-ups, charts, sign-in and roles, audit trail, sign-in throttling, JSON logs and a readiness check. Next are an evaluation dataset, production images, AWS deployment and CI/CD. See `docs/build-plan.html` for details.
+Milestones 1 to 24 are done: the core question flow, follow-ups, charts, sign-in and roles, audit trail, sign-in throttling, JSON logs, a readiness check and a real-model evaluation suite. Next are production images, AWS deployment and CI/CD. See `docs/build-plan.html` for details.
 
-Known limits today: conversations and the token budget are kept in memory and reset on restart; there is no TLS outside AWS; greetings such as "hello" still trigger a guessed query; and result rows are sent to the model provider to write the explanation, so check its data policy before using real business data.
+Known limits today: conversations and the token budget are kept in memory and reset on restart; there is no TLS outside AWS; and result rows are sent to the model provider to write the explanation, so check its data policy before using real business data.
