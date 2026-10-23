@@ -8,3 +8,4 @@ __pycache__/
 backend/evals/reports/
 backups/
 temp/
+.env.backup-*
