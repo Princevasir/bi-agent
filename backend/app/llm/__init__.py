@@ -51,12 +51,23 @@ def _provider(provider) -> LLMService:
     raise LLMConfigError(f"Unknown LLM provider: {provider}")
 
 
+def _resilient(provider) -> LLMService:
+    """Network providers get one retry and a circuit breaker (demo gap D9); the fake model does not."""
+    llm = _provider(provider)
+    if provider == "fake":
+        return llm
+    from app.llm.resilience import CircuitBreaker, RetryingLLM
+    return CircuitBreaker(RetryingLLM(llm, attempts=int(os.getenv("LLM_RETRY_ATTEMPTS", "2"))), provider,
+                          failures=int(os.getenv("LLM_BREAKER_FAILURES", "3")),
+                          cooldown=float(os.getenv("LLM_BREAKER_COOLDOWN_SECONDS", "60")))
+
+
 @lru_cache
 def get_llm() -> LLMService:
     name = os.getenv("LLM_PROVIDER", "fake")
-    primary = _provider(name)
+    primary = _resilient(name)
     fallback = os.getenv("LLM_FALLBACK_PROVIDER", "")
     if not fallback or fallback == name:
         return primary
     from app.llm.fallback import FallbackLLM
-    return FallbackLLM(primary, _provider(fallback), name, fallback)
+    return FallbackLLM(primary, _resilient(fallback), name, fallback)

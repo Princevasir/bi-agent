@@ -78,6 +78,7 @@ The full list of what the project offers today. Keep it current as features land
 - One-line JSON logs with request ID, user, path, status and time; `X-Request-ID` is accepted and returned on every response.
 - `GET /health` (liveness) and `GET /ready` (both databases reachable).
 - No runaway loops: every question stops within 15 workflow steps (`max_steps` in the policy file; the longest normal path takes 13), on top of the one-repair and one-second-opinion counters. A stopped run returns 422 with a plain message and is audited as `step_limit`.
+- Retry and circuit breaker for each model provider: one retry with a short pause for transient failures, and after three failures in a row the provider is skipped for a minute, so the fallback answers at once or users get a clear "temporarily unavailable" message instead of waiting on a dead service (logged as `llm_retry`, `llm_circuit_open`, `llm_circuit_closed`).
 - Optional fast mode with a fallback: `LLM_PROVIDER=groq` and `LLM_FALLBACK_PROVIDER=ollama` answer a retail question in about 2 seconds on Groq, and switch to the local model when Groq fails or is rate-limited (logged as `llm_fallback`).
 - Timeouts, an output-token cap and a rolling hourly token budget for model calls, in total and per user, which refills on its own ("The question limit for this hour has been reached" when used up); model and database failures return clear, generic errors.
 - The whole stack starts with one `docker compose up`.
@@ -96,6 +97,7 @@ The full list of what the project offers today. Keep it current as features land
 - Retrieval (`app/knowledge/retrieval.py`): finds the chunks closest to a question, only from active documents shared with the user's role and embedded by the same model, all filtered in SQL. Settings are in the `[knowledge]` section of `backend/policy/guardrails.toml` (`top_k`, `min_similarity`, `max_context_tokens`). Measure it with `cd backend && APP_DATABASE_URL=postgresql://app_rw:app_dev_pw@localhost:5433/appdb .venv/bin/python -m evals.retrieval` (38 labelled questions; reports Recall@K, Precision@K, MRR and latency).
 
 ### Testing and quality
+- A demo dry run (`python -m evals.demo`) rehearses all 14 demo scenarios, happy and unhappy paths, on the real stack and fails loudly if any answer is wrong.
 - Backend and frontend test suites; tests use a scripted model, so they are free and repeatable.
 - An evaluation dataset of 23 questions with known answers, including follow-ups, an empty result, four safety probes and three requests that should be declined, with a scoring harness that checks the real workflow's results rather than its SQL text. A runner asks the real model every question, can repeat each one, compares with a saved baseline, and fails on any safety problem or regression.
 
@@ -217,6 +219,8 @@ Set in `.env`; defaults come from `docker-compose.yml`.
 | `LLM_MAX_OUTPUT_TOKENS` | 512 | Per LLM call |
 | `LLM_FALLBACK_PROVIDER` | none | A second provider used when the first times out, is rate-limited or fails, e.g. `groq` first and `ollama` as fallback |
 | `GROQ_TIMEOUT_SECONDS`, `OLLAMA_TIMEOUT_SECONDS`, `OPENROUTER_TIMEOUT_SECONDS` | `LLM_TIMEOUT_SECONDS` | Per-provider timeout, so a hosted model can fail fast while the local fallback gets longer |
+| `LLM_RETRY_ATTEMPTS` | 2 | Attempts per model call for transient failures (throttling, 5xx, dropped connection); 1 switches retries off. Timeouts, configuration errors and our own budget are never retried |
+| `LLM_BREAKER_FAILURES`, `LLM_BREAKER_COOLDOWN_SECONDS` | 3, 60 | After this many failures in a row a provider is skipped for the cooldown (503, or the fallback answers at once); one trial call then closes or reopens the breaker |
 | `LLM_TOKEN_BUDGET` | 400000 | Tokens per rolling hour, all users together; when reached, questions get a 429 until older usage expires |
 | `LLM_USER_TOKEN_BUDGET` | 150000 | Each user's share of the hourly budget (about 20 retail questions) |
 | `LLM_TOKEN_BUDGET_WINDOW_SECONDS` | 3600 | Length of the rolling budget window |
@@ -253,6 +257,16 @@ python3 -m venv .venv
 Tests never call the real LLM: they use a scripted fake model (`backend/tests/routed_llm.py`). Integration tests connect to the Compose database on host port 5433.
 
 The evaluation dataset lives in `backend/evals/cases.json` and the scoring code in `backend/evals/harness.py`; `tests/test_evals.py` checks that every expected answer is right and that the scoring rules behave.
+
+### Demo dry run
+
+Before presenting, rehearse every demo scenario automatically against the real stack (retail data, knowledge index, the model in `.env`):
+
+```bash
+cd backend && set -a && source ../.env && set +a && .venv/bin/python -m evals.demo     # about 2 minutes on the local model
+```
+
+It runs 14 scenarios from `backend/evals/demo_cases.json`: the happy paths (average order value, revenue by region and a pie-chart redraw, fiscal year and a follow-up, the catalog, two answers from the business documents) and deliberately broken ones (a delete request, a greeting, personal data, a limited user asking for revenue, the knowledge index down, the model down). Expected numbers come from fixed reference queries on the current data. It prints PASS or FAIL per scenario, checks the data is unchanged, and exits 1 on any failure. `--case ID` runs one scenario.
 
 ### Evaluating the real model
 

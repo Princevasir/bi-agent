@@ -25,7 +25,7 @@ from app.db import (DBAccessError, DBError, DBQueryError, DBTimeoutError, Result
 from app.llm import get_llm
 from app.knowledge.context import knowledge_for
 from app.llm.base import (
-    LLMBudgetError, LLMConfigError, LLMError, LLMRateLimitError, LLMService, LLMTimeoutError,
+    LLMBudgetError, LLMConfigError, LLMError, LLMRateLimitError, LLMService, LLMTimeoutError, LLMUnavailableError,
 )
 from app.llm.budget import from_env as budget_from_env
 from app import policy
@@ -47,6 +47,7 @@ LLM_ERRORS = [
     (LLMTimeoutError, 504, "The language model timed out."),
     (LLMBudgetError, 429, "The question limit for this hour has been reached. Please try again later."),
     (LLMRateLimitError, 429, "Too many requests to the language model."),
+    (LLMUnavailableError, 503, "The language model is temporarily unavailable. Please try again in a minute."),
     (LLMConfigError, 503, "The language model is not configured correctly."),
     (LLMError, 502, "The language model request failed."),
 ]

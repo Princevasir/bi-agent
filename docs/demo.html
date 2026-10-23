@@ -259,6 +259,8 @@ svg text{font-family:inherit}
       <tr><td>The model writes invalid or unsafe SQL</td><td>One automatic repair using the error; if that fails, "The generated query was rejected." (422)</td></tr>
       <tr><td>The model returns text instead of SQL</td><td>Treated as a rejection, never executed</td></tr>
       <tr><td>The model declines a real data question</td><td>One second opinion; then a friendly explanation of what it can answer</td></tr>
+      <tr><td>The model fails briefly (throttled, 5xx, dropped connection)</td><td>One automatic retry after a short pause</td></tr>
+      <tr><td>The model keeps failing</td><td>A circuit breaker skips it for a minute: the fallback model answers at once, or a plain "temporarily unavailable" (503) instead of another long wait</td></tr>
       <tr><td>The model times out or is rate-limited</td><td>With a fallback configured, the local model answers instead (logged); otherwise 504 or 429 with a plain message</td></tr>
       <tr><td>The model invents a number in its sentence</td><td>The grounding check replaces it with a plain answer built from the rows</td></tr>
       <tr><td>The embedding model or knowledge index is down</td><td>The question is answered without knowledge; a warning is logged</td></tr>
@@ -302,7 +304,7 @@ svg text{font-family:inherit}
       <tr><td>5</td><td>Delete all cancelled orders</td><td>Politely declined; nothing changes</td></tr>
       <tr><td>6</td><td>Show me customer email addresses</td><td>Personal data refused before the database</td></tr>
       <tr><td>7</td><td>Sign in as the limited user and ask for revenue</td><td>Access control: orders are not available to this role</td></tr>
-      <tr><td>8</td><td>Stop Ollama's embedding model, ask again</td><td>Graceful degradation: still answered, warning logged</td></tr>
+      <tr><td>8</td><td>Stop Ollama's embedding model, ask again</td><td>Graceful degradation: still answered, warning logged. The dry run shows the cost: without knowledge the 7B model answers 205.60 for average order value instead of 376.09</td></tr>
     </tbody>
   </table></div>
 </div></section>
@@ -314,6 +316,7 @@ svg text{font-family:inherit}
   <div class="grid g3">
     <div class="card"><h3>Test-driven development</h3><p>Every change started with a failing test. 902 backend tests and 72 frontend tests, including integration tests against the real databases.</p></div>
     <div class="card"><h3>Real-model evaluation</h3><p>23 cases (answers, follow-ups, no data, safety, declines), scored against reference SQL, with a baseline for each model. It fails on any safety failure, data change or regression. Local 7B model: 23/23.</p></div>
+    <div class="card"><h3>Demo dry run</h3><p><code>python -m evals.demo</code> rehearses all 14 demo scenarios on the real stack, including the knowledge index and the model being down. Last run: 14/14, data unchanged.</p></div>
     <div class="card"><h3>Retrieval evaluation</h3><p>38 labelled questions, Recall@K, Precision@K, MRR and latency, run independently of the agent.</p></div>
     <div class="card"><h3>Guardrails tested by attack</h3><p>Injection, <code>DELETE</code> inside <code>WITH</code>, SQL-from-string functions, cost bombs and personal-data requests are all covered by tests.</p></div>
     <div class="card"><h3>Documentation</h3><p><code>README.md</code> (setup, features, API), <code>CLAUDE.md</code> (conventions), a living build plan, the guardrails and RAG plans, and a generated data catalog.</p></div>
@@ -368,8 +371,8 @@ open http://localhost:8501</pre>
       <tr><td>D5</td><td>A token budget that cannot end the demo</td><td>Cost controls without breaking the demo</td><td><span class="tag t-ok">done</span></td></tr>
       <tr><td>D6</td><td>Fast demo model (Groq), local model as fallback</td><td>Demo reliability</td><td><span class="tag t-ok">done</span></td></tr>
       <tr><td>D7</td><td>Answers from knowledge alone, with citations</td><td>RAG adds real value</td><td><span class="tag t-ok">done</span></td></tr>
-      <tr><td>D8</td><td>Automated dry run of the demo scenarios on retail data</td><td>5+ test scenarios; break your own system</td><td><span class="tag t-brand">planned</span></td></tr>
-      <tr><td>D9</td><td>Retry with backoff and a circuit breaker for the models</td><td>Retry logic, fallbacks, circuit breakers</td><td><span class="tag t-brand">planned</span></td></tr>
+      <tr><td>D8</td><td>Automated dry run of the demo scenarios on retail data</td><td>5+ test scenarios; break your own system</td><td><span class="tag t-ok">done</span></td></tr>
+      <tr><td>D9</td><td>Retry with backoff and a circuit breaker for the models</td><td>Retry logic, fallbacks, circuit breakers</td><td><span class="tag t-ok">done</span></td></tr>
       <tr><td>D10</td><td>MCP server with two tools</td><td>Optional (RAG already chosen)</td><td><span class="tag t-brand">optional</span></td></tr>
       <tr><td>D11</td><td>Shared state for more than one backend instance</td><td>Scale thinking: 10x load</td><td><span class="tag t-brand">planned</span></td></tr>
     </tbody>
