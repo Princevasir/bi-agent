@@ -280,7 +280,7 @@ def ask(body: AskRequest, request: Request,
                 conversation_id=cid, question=body.message,
                 interpreted_as=out["interpreted_as"], sql=out["sql"],
                 row_count=len(out["rows"]), truncated=out["truncated"],
-                answer_source=out["answer_source"])
+                answer_source=out["answer_source"], sql_repairs=out["sql_repairs"])
     return {**out, "conversation_id": cid}
 
 

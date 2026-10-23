@@ -15,7 +15,8 @@ from pathlib import Path
 from sqlglot import exp
 
 DEFAULT_PATH = Path(__file__).resolve().parents[1] / "policy" / "guardrails.toml"
-SQL_LIMITS = ("max_rows", "max_result_bytes", "timeout_ms", "max_tables", "max_depth")
+SQL_LIMITS = ("max_rows", "max_result_bytes", "timeout_ms", "max_tables", "max_depth", "repair_attempts")
+MAY_BE_ZERO = {"repair_attempts"}
 TABLE_NAME = re.compile(r"^[a-z_][a-z0-9_]*$")
 ENV_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
@@ -96,8 +97,8 @@ def load(path=None):
     _keys(sql, "[sql]", SQL_LIMITS + ("functions",))
     for name in SQL_LIMITS:
         v = sql[name]
-        if isinstance(v, bool) or not isinstance(v, int) or v <= 0:
-            raise PolicyError(f"[sql] {name} must be a whole number greater than 0.")
+        if isinstance(v, bool) or not isinstance(v, int) or v < (0 if name in MAY_BE_ZERO else 1):
+            raise PolicyError(f"[sql] {name} must be a whole number greater than {-1 if name in MAY_BE_ZERO else 0}.")
 
     fn = sql["functions"]
     _keys(fn, "[sql.functions]", ("allowed_types", "allowed_names", "blocked_prefixes", "prompt_functions"))

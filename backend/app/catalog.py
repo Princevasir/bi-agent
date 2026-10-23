@@ -54,6 +54,7 @@ class Catalog:
     path: Path
     tables: dict
     metrics: dict
+    hints: tuple = ()
 
 
 def _read(path):
@@ -104,9 +105,16 @@ def load(path=None):
     files = sorted(path.glob("*.toml"))
     if not files:
         raise CatalogError(f"No catalog files in {path}.")
-    tables, metrics = {}, {}
+    tables, metrics, hints = {}, {}, ()
     for f in files:
         doc = _read(f)
+        if f.name == "hints.toml":
+            _unknown(doc, {"hints"}, f.name)
+            raw = doc.get("hints")
+            if not isinstance(raw, list) or not raw or not all(isinstance(h, str) and h.strip() for h in raw):
+                raise CatalogError("hints.toml: hints must be a non-empty list of text.")
+            hints = tuple(h.strip() for h in raw)
+            continue
         if f.name == "metrics.toml":
             _unknown(doc, {"metrics"}, f.name)
             for name, raw in doc.get("metrics", {}).items():
@@ -136,7 +144,7 @@ def load(path=None):
         unknown = set(m.tables) - set(tables)
         if unknown:
             raise CatalogError(f"Metric {m.name} uses undescribed tables: {', '.join(sorted(unknown))}")
-    return Catalog(path, tables, metrics)
+    return Catalog(path, tables, metrics, hints)
 
 
 # ---- the database side ----------------------------------------------------------------------------

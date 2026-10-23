@@ -7,7 +7,7 @@ import os
 from app import policy
 
 
-def _limit(env_name, key):
+def _limit(env_name, key, minimum=1):
     ceiling = policy.get().sql[key]
     raw = os.getenv(env_name)
     if raw is None:
@@ -16,8 +16,8 @@ def _limit(env_name, key):
         value = int(raw)
     except ValueError:
         raise ValueError(f"{env_name} must be a whole number, got {raw!r}") from None
-    if value <= 0:
-        raise ValueError(f"{env_name} must be greater than 0, got {value}")
+    if value < minimum:
+        raise ValueError(f"{env_name} must be at least {minimum}, got {value}")
     return min(value, ceiling)   # tighten only (GR-POL-01)
 
 
@@ -39,6 +39,11 @@ def sql_timeout_ms():
 def sql_max_tables():
     """Table references per query, counting repeats (GR-SQL-02)."""
     return _limit("SQL_MAX_TABLES", "max_tables")
+
+
+def sql_repair_attempts():
+    """Retries after a fixable SQL failure; 0 switches repair off (GR-WF-01)."""
+    return _limit("SQL_REPAIR_ATTEMPTS", "repair_attempts", minimum=0)
 
 
 def sql_max_depth():

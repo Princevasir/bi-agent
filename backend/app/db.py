@@ -22,6 +22,10 @@ class DBTimeoutError(DBError):
 class DBQueryError(DBError):
     """The query itself is wrong (unknown or ambiguous column, syntax, bad value)."""
 
+    def __init__(self, message, detail=""):
+        super().__init__(message)
+        self.detail = detail
+
 
 class DBAccessError(DBError):
     """The login may not read something the query asked for."""
@@ -92,6 +96,7 @@ def run_readonly(sql, params=None, max_rows=None, timeout_ms=None, role="analyst
     except psycopg.Error as e:
         # SQLSTATE class 42 (syntax or access rule) and 22 (bad data): the query is wrong, not the database.
         if (getattr(e, "sqlstate", None) or "")[:2] in ("42", "22"):
-            raise DBQueryError("The query failed.") from e
+            first_line = (str(e).strip().splitlines() or [""])[0][:200]
+            raise DBQueryError("The query failed.", detail=first_line) from e
         raise DBError("Database error.") from e
     return {"columns": columns, "rows": rows, "truncated": truncated}

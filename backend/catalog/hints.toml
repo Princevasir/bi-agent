@@ -1,0 +1,9 @@
+# SQL tips for the retail data, shown in the model's prompt (guidance, not enforcement).
+hints = [
+  "Years: filter orders.ordered_at >= '2025-01-01' AND orders.ordered_at < '2026-01-01' (a half-open range), not EXTRACT(YEAR ...) = 2025.",
+  "Quarters: SELECT EXTRACT(QUARTER FROM orders.ordered_at) AS quarter ... GROUP BY EXTRACT(QUARTER FROM orders.ordered_at) ORDER BY quarter. There is no quarter column.",
+  "Months: SELECT to_char(date_trunc('month', orders.ordered_at), 'YYYY-MM') AS month ... GROUP BY 1 ORDER BY 1. Use the same expression in SELECT and GROUP BY.",
+  "Weeks: date_trunc('week', orders.ordered_at); weekdays: EXTRACT(ISODOW FROM orders.ordered_at), 1 is Monday.",
+  "Every column in SELECT must be in GROUP BY or inside an aggregate such as SUM or COUNT.",
+  "Columns such as name, city, status, quantity, unit_cost, discount_amount and country_id exist in several tables: always prefix them with the table alias (p.name, c.name).",
+]

@@ -166,3 +166,14 @@ def test_documented_values_cover_the_data(cat):
                 i = COLUMNS[t.name].index(c.name)
                 seen = {r[i] for r in data[t.name] if r[i] is not None}
                 assert seen <= set(c.values), (t.name, c.name, seen - set(c.values))
+
+
+def test_sql_hints_cover_dates_and_shared_column_names(cat):
+    hints = " ".join(cat.hints)
+    for needle in ("EXTRACT(QUARTER FROM", "date_trunc('month'", "GROUP BY", ">= '2025-01-01'", "table alias"):
+        assert needle in hints, needle
+
+
+def test_hints_must_be_a_list_of_text(tmp_path):
+    with pytest.raises(catalog.CatalogError, match="hints"):
+        catalog.load(_broken(tmp_path, "hints.toml", "hints = [", "hints = 5\nold = ["))

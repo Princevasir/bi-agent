@@ -27,13 +27,16 @@ TOO_BROAD_MESSAGE = ("The generated query was too broad to run safely. "
 class SQLRejected(Exception):
     """Raised for SQL that must not run. user_message, when set, is safe to show the user."""
 
-    def __init__(self, reason, user_message=None):
+    def __init__(self, reason, user_message=None, repairable=False):
         super().__init__(reason)
         self.user_message = user_message
+        # GR-WF-01: True only for mistakes the model can fix (syntax, an unlisted function, a query too
+        # broad); never for a rule (tables, personal data, writes, schema names, locking).
+        self.repairable = repairable
 
 
 def _too_broad(reason):
-    return SQLRejected(reason, TOO_BROAD_MESSAGE)
+    return SQLRejected(reason, TOO_BROAD_MESSAGE, repairable=True)
 
 
 def _function_name(f):
@@ -51,7 +54,7 @@ def _check_functions(tree):
         allowed = (f.name.lower() in ALLOWED_FUNCTION_NAMES if isinstance(f, exp.Anonymous)
                    else type(f).__name__ in ALLOWED_FUNCTION_TYPES)
         if not allowed:
-            raise SQLRejected(f"Function not permitted: {_function_name(f)}")
+            raise SQLRejected(f"Function not permitted: {_function_name(f)}", repairable=True)
 
 
 def _is_one_row(source, ctes):
@@ -128,9 +131,9 @@ def validate_sql(sql: str, allowed_tables = ALLOWED_TABLES, denied_columns=froze
     try:
         statements = [s for s in sqlglot.parse(sql, read="postgres") if s is not None]
     except SqlglotError as e:
-        raise SQLRejected("The SQL could not be parsed.") from e
+        raise SQLRejected("The SQL could not be parsed.", repairable=True) from e
     if len(statements) != 1:
-        raise SQLRejected("Exactly one statement is allowed.")
+        raise SQLRejected("Exactly one statement is allowed.", repairable=True)
     tree = statements[0]
     if not isinstance(tree, (exp.Select, *SET_OPERATIONS)):
         raise SQLRejected("Only SELECT statements are allowed.")
@@ -141,7 +144,7 @@ def validate_sql(sql: str, allowed_tables = ALLOWED_TABLES, denied_columns=froze
     ctes = {c.alias for c in tree.find_all(exp.CTE)}
     for t in tree.find_all(exp.Table):
         if isinstance(t.this, exp.Func) or not t.name:
-            raise SQLRejected("Table functions are not allowed.")
+            raise SQLRejected("Table functions are not allowed.", repairable=True)
         if t.name in ctes and not t.db:
             continue
         if t.db or t.catalog:

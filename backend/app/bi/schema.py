@@ -90,5 +90,12 @@ def metrics_text(role="analyst"):
     )
 
 
+def hints_text():
+    """SQL tips from the catalog (retail only): how to group by quarter or month, prefix shared names."""
+    if not uses_catalog():
+        return ""
+    return "\n".join(f"- {h}" for h in catalog.get().hints)
+
+
 def clear_cache():
     _catalog_text.cache_clear()

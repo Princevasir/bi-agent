@@ -13,6 +13,7 @@ max_result_bytes = 1000000  # JSON size of the rows returned per query (GR-SQL-0
 timeout_ms = 5000           # statement timeout per query
 max_tables = 8              # table references per query, repeats counted (GR-SQL-02)
 max_depth = 3               # how deeply SELECTs may be nested (GR-SQL-02)
+repair_attempts = 1         # retries after a fixable SQL failure; 0 switches repair off (GR-WF-01)
 
 [sql.functions]
 # Only these functions may appear in generated SQL (GR-SQL-01). Typed functions are matched by

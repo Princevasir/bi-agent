@@ -3,7 +3,7 @@ from datetime import date
 
 from app import policy
 from app.access import denied_columns
-from app.bi.schema import metrics_text, schema_text
+from app.bi.schema import hints_text, metrics_text, schema_text
 
 FENCE = re.compile(r"```(?:sql)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
 NO_QUERY = "NO_QUERY"
@@ -30,7 +30,16 @@ def rules_text(role: str = "analyst") -> str:
     )
 
 
-def build_prompt(question: str, today: date, role: str = "analyst") -> str:
+def repair_text(repair) -> str:
+    """GR-WF-01: the failed query and the plain reason, for one more try."""
+    if not repair:
+        return ""
+    failed_sql, error = repair
+    return (f"Your previous query failed. Previous query:\n{failed_sql}\nError: {error}\n"
+            "Write a corrected query that answers the same question.\n\n")
+
+
+def build_prompt(question: str, today: date, role: str = "analyst", repair=None) -> str:
     return (
         "You write PostgreSQL for a BI tool. Return exactly one SELECT statement "
         "and nothing else. Use only the tables and columns listed below. "
@@ -43,7 +52,9 @@ def build_prompt(question: str, today: date, role: str = "analyst") -> str:
         f"small talk) or asks to change or delete data, return exactly {NO_QUERY} instead.\n\n"
         f"Today's date: {today.isoformat()}\n\n"
         f"Schema:\n{schema_text(role)}\n\nMetrics:\n{metrics_text(role)}\n\n"
-        f"{rules_text(role)}\n\n"
+        + (f"SQL tips:\n{hints}\n\n" if (hints := hints_text()) else "")
+        + f"{rules_text(role)}\n\n"
+        f"{repair_text(repair)}"
         f"Question: {question}\nSQL:"
     )
 
@@ -58,5 +69,5 @@ def is_no_query(text: str) -> bool:
     return text.strip().rstrip(";.").strip().upper() == NO_QUERY
 
 
-def generate_sql(question: str, generate, today: date, role: str = "analyst") -> str:
-    return extract_sql(generate(build_prompt(question, today, role)))
+def generate_sql(question: str, generate, today: date, role: str = "analyst", repair=None) -> str:
+    return extract_sql(generate(build_prompt(question, today, role, repair)))

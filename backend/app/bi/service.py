@@ -7,9 +7,10 @@ from app.access import denied_columns, tables_for
 from app.bi.chart import apply_request, build_chart_spec, requested_chart
 from app.bi.grounding import answer_prompt, fallback_answer, is_grounded
 from app.bi.rewrite import rewrite_prompt
-from app.bi.sql_guard import validate_sql
+from app.bi.sql_guard import SQLRejected, validate_sql
 from app.bi.text_to_sql import generate_sql, is_no_query
-from app.db import run_readonly
+from app import limits
+from app.db import DBQueryError, run_readonly
 
 MAX_QUESTION_CHARS = 500
 NO_QUERY_ANSWER = ("I can only answer questions about the data you have access to, "
@@ -30,6 +31,8 @@ class State(TypedDict, total=False):
     draft: str
     answer: str
     answer_source: str
+    repairs: int
+    repair: tuple
 
 
 def has_data(rows):
@@ -48,17 +51,32 @@ def build_graph(generate):
 
     def write_sql(state):
         question = state.get("standalone") or state["question"]
-        return {"sql": generate_sql(question, generate, state["today"], role=state["role"])}
+        sql = generate_sql(question, generate, state["today"], role=state["role"], repair=state.get("repair"))
+        return {"sql": sql, "repair": None}
+
+    def retry_or_raise(state, failed_sql, reason, error):
+        """GR-WF-01: one more try with the reason, if allowed; otherwise the failure stands."""
+        if state.get("repairs", 0) >= limits.sql_repair_attempts():
+            raise error
+        return {"repair": (failed_sql, reason), "repairs": state.get("repairs", 0) + 1}
 
     def declined(state):
         return {"sql": "", "columns": [], "rows": [], "truncated": False,
                 "answer": NO_QUERY_ANSWER, "answer_source": "fallback"}
 
     def check_sql(state):
-        return {"sql": validate_sql(state["sql"], tables_for(state["role"]), denied_columns(state["role"]))}
+        try:
+            return {"sql": validate_sql(state["sql"], tables_for(state["role"]), denied_columns(state["role"]))}
+        except SQLRejected as e:
+            if not e.repairable:
+                raise
+            return retry_or_raise(state, state["sql"], str(e), e)
 
     def execute(state):
-        return run_readonly(state["sql"], role=state["role"])
+        try:
+            return run_readonly(state["sql"], role=state["role"])
+        except DBQueryError as e:
+            return retry_or_raise(state, state["sql"], e.detail or str(e), e)
 
     def no_rows(state):
         text = "The query returned no rows." if not state["rows"] else "No matching data was found."
@@ -90,7 +108,12 @@ def build_graph(generate):
     def after_write(state):
         return "declined" if is_no_query(state["sql"]) else "check_sql"
 
+    def after_check(state):
+        return "write_sql" if state.get("repair") else "execute"
+
     def after_execute(state):
+        if state.get("repair"):
+            return "write_sql"
         return "explain" if has_data(state["rows"]) else "no_rows"
 
     g = StateGraph(State)
@@ -107,9 +130,9 @@ def build_graph(generate):
     g.add_conditional_edges("write_sql", after_write,
                             {"declined": "declined", "check_sql": "check_sql"})
     g.add_edge("declined", END)
-    g.add_edge("check_sql", "execute")
+    g.add_conditional_edges("check_sql", after_check, {"write_sql": "write_sql", "execute": "execute"})
     g.add_conditional_edges(
-        "execute", after_execute, {"explain": "explain", "no_rows": "no_rows"}
+        "execute", after_execute, {"write_sql": "write_sql", "explain": "explain", "no_rows": "no_rows"}
     )
     g.add_edge("explain", "ground")
     g.add_edge("ground", END)
@@ -133,4 +156,5 @@ def answer_question(question, generate, today, history=None, role="analyst"):
         "answer_source": out["answer_source"],
         "chart": chart,
         "chart_note": chart_note,
+        "sql_repairs": out.get("repairs", 0),
     }

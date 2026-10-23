@@ -44,7 +44,9 @@ def test_policy_file_reproduces_the_previous_rules():
     p = policy.load(POLICY_FILE)
     assert {r: role.tables for r, role in p.roles.items()} == BEFORE["roles"]
     assert {r: role.database_url_env for r, role in p.roles.items()} == BEFORE["db_env"]
-    assert p.sql == BEFORE["limits"]
+    # GR-WF-01 added repair_attempts later; every value that existed before is unchanged.
+    assert {k: v for k, v in p.sql.items() if k != "repair_attempts"} == BEFORE["limits"]
+    assert p.sql["repair_attempts"] == 1
     assert p.allowed_function_types == BEFORE["types"]
     assert p.allowed_function_names == BEFORE["names"]
     assert p.blocked_prefixes == BEFORE["prefixes"]

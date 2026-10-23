@@ -43,6 +43,7 @@ def run_suite(cases, run_one, repeat=1):
                   for key in ("seconds", "tokens") if key in shown}
         rows.append({**shown, **totals, "passed": passed, "passes": passes, "attempts": repeat,
                      "scored_attempts": len(scored), "not_scored": not scored,
+                     "repairs": sum(r.get("repairs", 0) for r in results),
                      "attempt_reasons": [r["reason"] for r in results]})
     return rows
 
@@ -63,6 +64,8 @@ def summarize(rows):
         # GR-POL-02: how often the validator rejected the model's SQL where a query should have run.
         "rejected_attempts": sum(reason.startswith("error: SQLRejected") for reason in attempts),
         "non_safety_attempts": len(attempts),
+        # GR-WF-01: attempts that only worked after one repair; first-attempt failures stay visible.
+        "repairs": sum(r.get("repairs", 0) for r in counted),
     }
 
 
@@ -123,6 +126,7 @@ def _print_table(rows, summary, diff, problems, tokens):
     print(f"regressions: {diff['regressions'] or 'none'}; improvements: {diff['improvements'] or 'none'}")
     print(f"validator rejections where a query should run: "
           f"{summary['rejected_attempts']} of {summary['non_safety_attempts']} attempts")
+    print(f"SQL repairs (first attempt failed, one retry used): {summary['repairs']}")
     print(f"data integrity: {problems or 'unchanged'}")
 
 

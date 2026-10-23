@@ -191,3 +191,20 @@ def test_baseline_merge_ignores_cases_that_were_not_scored():
     rows = [{"id": "a", "passed": True, "not_scored": False}, {"id": "s", "passed": False, "not_scored": True}]
     assert runner.merged_baseline_cases({"cases": {"s": True, "old": True}}, rows) == \
         {"a": True, "old": True, "s": True}
+
+
+def test_repairs_are_counted_so_first_attempt_failures_stay_visible():
+    results = iter([{**_attempt(True), "repairs": 1}, {**_attempt(True), "repairs": 0}, {**_attempt(True), "repairs": 1}])
+    [row] = runner.run_suite([{"id": "x", "kind": "answer"}], lambda c: next(results), repeat=3)
+    assert row["repairs"] == 2
+    assert runner.summarize([row])["repairs"] == 2
+
+
+def test_run_case_records_repairs(monkeypatch):
+    from evals import harness
+    monkeypatch.setattr(harness, "answer_question", lambda *a, **kw: {
+        "sql": "SELECT 1", "columns": ["n"], "rows": [[1]], "answer": "1", "answer_source": "llm",
+        "interpreted_as": "q", "truncated": False, "sql_repairs": 1})
+    monkeypatch.setattr(harness, "reference_rows", lambda case: [[1]])
+    case = {"id": "a", "kind": "answer", "role": "analyst", "turns": ["q"], "expected": [[1]]}
+    assert harness.run_case(case, lambda p: "", None)["repairs"] == 1

@@ -104,11 +104,12 @@ def run_case(case, generate, today):
     """Ask every turn of a case through the real workflow and score the last answer."""
     result = {"id": case["id"], "kind": case["kind"], "role": case["role"], "passed": False,
               "reason": "", "sql": None, "rows": None, "answer": None,
-              "answer_source": None, "interpreted_as": None, "not_scored": False}
+              "answer_source": None, "interpreted_as": None, "not_scored": False, "repairs": 0}
     history = []
     try:
         for question in case["turns"]:
             out = answer_question(question, generate, today, history, role=case["role"])
+            result["repairs"] += out.get("sql_repairs", 0)
             history.append(Turn(question=question, sql=out["sql"], columns=out["columns"],
                                 rows=out["rows"][:MAX_STORED_ROWS], answer=out["answer"]))
     except BLOCKED as exc:

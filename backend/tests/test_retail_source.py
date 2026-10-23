@@ -178,3 +178,17 @@ def test_ask_for_personal_data_gets_a_clear_refusal(retail, loaded, monkeypatch,
     assert r.status_code == 422
     assert r.json() == {"detail": PERSONAL_DATA_MESSAGE}
     assert [e["event"] for e in audit_events] == ["sql_rejected"]
+
+
+@pytest.mark.integration
+def test_retail_prompt_includes_the_sql_hints(retail, loaded):
+    from datetime import date
+    prompt = build_prompt("Revenue by quarter in 2025", date(2026, 10, 15), "analyst")
+    assert "EXTRACT(QUARTER FROM orders.ordered_at)" in prompt
+
+
+def test_sample_prompt_has_no_retail_hints(monkeypatch):
+    from datetime import date
+    import app.bi.text_to_sql as t2s
+    monkeypatch.setattr(t2s, "schema_text", lambda role="analyst": "orders(id integer)")
+    assert "EXTRACT(QUARTER FROM orders.ordered_at)" not in build_prompt("x", date(2026, 10, 15))
