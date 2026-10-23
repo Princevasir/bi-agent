@@ -105,6 +105,16 @@ The full list of what the project offers today. Keep it current as features land
 
 ## Quick start
 
+The demo in three commands (needs Docker Desktop and [Ollama](https://ollama.com) running; about a minute on a clean machine once the models are pulled):
+
+```bash
+cp .env.example .env
+./scripts/setup.sh          # fills .env, checks Ollama, starts the stack, loads data, indexes knowledge, creates demo users
+open http://localhost:8501  # sign in as demo-analyst or demo-limited
+```
+
+The script is safe to run again; it skips work already done and never prints secrets. The manual steps below do the same by hand.
+
 From the repository root:
 
 ```bash

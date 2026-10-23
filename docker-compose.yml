@@ -45,6 +45,23 @@ services:
         condition: service_healthy
     environment:
       BACKEND_URL: http://backend:8000
+  setup:
+    # One-off jobs for scripts/setup.sh: load the retail data and index the knowledge pack.
+    # Uses the backend image with the repository mounted read-only, so no Python is needed on the host.
+    build: ./backend
+    profiles: ["setup"]
+    depends_on:
+      db:
+        condition: service_healthy
+    working_dir: /repo/backend
+    volumes:
+      - .:/repo:ro
+    environment:
+      PYTHONPATH: /repo/backend
+      LOG_LEVEL: WARNING
+      RETAIL_OWNER_URL: postgresql://retail_owner:retail_owner_dev_pw@db:5432/retail
+      KNOWLEDGE_DATABASE_URL: postgresql://knowledge_writer:knowledge_writer_dev_pw@db:5432/appdb
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434/v1}
   db:
     image: pgvector/pgvector:pg16-trixie   # Postgres 16 + pgvector, same Debian 13 and glibc as postgres:16
     environment:
