@@ -3313,6 +3313,7 @@ backend/.venv/bin/python -m pytest image_tests</code></pre>
 <p><b>Gate:</b> backend tests for each new field and route (sign-in required, audit events, no result rows in audit); AppTest tests for each feature; real-model evaluation unchanged; your browser check. Commits per feature group.</p></div></details>
 <p class="key">Known limits of F: Saved insights last only for the browser session; Streamlit reruns the script on every click, so very large results would feel slow (results are capped at 200 rows); the browser check is manual.</p>
 
+<p class="key">Groq added 24 October 2026 (<code>LLM_PROVIDER=groq</code>, default <code>qwen/qwen3.8-27b</code>): 6 tests failed first; three-round sample evaluation 22/23 with no safety failures, 0 to 1 second per call; the one failure, "Which region had the highest revenue in September 2026?", returned the right region without its revenue, which the case requires; three attempts were Groq provider errors and correctly reported as not scored. Free tier: about 8,000 tokens a minute, so the runner now waits out rate limits. OpenRouter still has no account credit.</p>
 <h2>RAG track (approved 24 October 2026)</h2>
 <p>Knowledge retrieval for business questions is planned and tracked in <a href="rag.html">rag.html</a>: a Trailhead Outfitters knowledge pack, pgvector in Postgres, local Ollama embeddings, and milestones R1 to R8 (R7 absorbs M29d). It replaces the earlier M30 and M31 sketches for schema retrieval; memory (M31) builds on it later.</p>
 

@@ -14,6 +14,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 from app.llm import get_llm
+from app.llm.base import LLMRateLimitError
 from app.llm.budget import TokenBudget
 from evals.harness import check_integrity, integrity_snapshot, load_cases, run_case
 
@@ -92,6 +93,18 @@ def merged_baseline_cases(baseline, rows):
                         **{r["id"]: r["passed"] for r in rows if not r.get("not_scored")}}.items()))
 
 
+def with_backoff(call, sleep=time.sleep, attempts=6):
+    """Retry a provider call that was rate-limited (free tiers limit tokens per minute), waiting
+    10, 20, 40, 60, 60 seconds. Only provider rate limits are retried, never other errors."""
+    for attempt in range(attempts):
+        try:
+            return call()
+        except LLMRateLimitError:
+            if attempt == attempts - 1:
+                raise
+            sleep(min(10 * 2 ** attempt, 60))
+
+
 def baseline_path(model):
     """Each model is compared only with its own accepted results."""
     return HERE / "baselines" / (re.sub(r"[^A-Za-z0-9._-]+", "-", model).strip("-") + ".json")
@@ -155,7 +168,7 @@ def main(argv=None):
 
     def generate(prompt):
         budget.check()
-        out = llm.generate(prompt)
+        out = with_backoff(lambda: llm.generate(prompt))
         spent = out.input_tokens + out.output_tokens
         budget.record(spent)
         used["tokens"] += spent

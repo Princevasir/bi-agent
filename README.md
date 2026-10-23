@@ -189,7 +189,8 @@ Set in `.env`; defaults come from `docker-compose.yml`.
 |---|---|---|
 | `JWT_SECRET` | none (required) | At least 32 characters; signs login tokens |
 | `JWT_EXPIRE_MINUTES` | 60 | Token lifetime |
-| `LLM_PROVIDER` | `fake` | `openrouter` or `ollama` (a local model) for real answers |
+| `LLM_PROVIDER` | `fake` | `openrouter`, `groq` or `ollama` (a local model) for real answers |
+| `GROQ_API_KEY`, `GROQ_MODEL` | none, `qwen/qwen3.8-27b` | For `LLM_PROVIDER=groq` (Groq's free tier allows about 8,000 tokens a minute; the evaluation runner waits out rate limits) |
 | `OLLAMA_BASE_URL` | `http://localhost:11434/v1` (`host.docker.internal` inside Docker) | Ollama's OpenAI-compatible address |
 | `OLLAMA_MODEL` | `qwen2.5-coder:7b` | Local model name |
 | `OPENROUTER_API_KEY` | none | Your OpenRouter key |
