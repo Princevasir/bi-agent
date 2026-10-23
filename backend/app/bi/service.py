@@ -120,7 +120,8 @@ def build_graph(generate):
 def answer_question(question, generate, today, history=None, role="analyst"):
     state = {"question": question, "today": today, "history": history or [], "role": role}
     out = build_graph(generate).invoke(state)
-    chart, chart_note = apply_request(build_chart_spec(out["columns"], out["rows"]), requested_chart(question))
+    requested = requested_chart(question) if out["rows"] else None     # nothing to draw, nothing to explain
+    chart, chart_note = apply_request(build_chart_spec(out["columns"], out["rows"]), requested)
     return {
         "question": question,
         "interpreted_as": out.get("standalone", question),

@@ -163,3 +163,37 @@ def test_time_and_category_are_found_in_any_column_order():
             ["North", "2026-09-01T00:00:00+00:00", 270.0]]
     spec = build_chart_spec(["region", "month", "revenue"], rows)
     assert (spec["type"], spec["x"], spec["series"], spec["y"]) == ("line", "month", "region", "revenue")
+
+
+# ---- period numbers (found 23 Oct 2026: "pie chart of revenue per quarter" became a scatter) ----
+
+QUARTERS = [[1.0, 6508027.89], [2.0, 10521466.91], [3.0, 11073159.07], [4.0, 12785692.79]]
+
+
+def test_quarter_numbers_are_categories():
+    spec = build_chart_spec(["quarter", "revenue"], QUARTERS)
+    assert spec["type"] == "bar"
+    assert {"pie", "donut", "line"} <= set(spec["options"])
+
+
+def test_month_and_weekday_numbers_are_categories():
+    months = [[m, float(m * 10)] for m in range(1, 13)]
+    assert build_chart_spec(["month", "revenue"], months)["type"] == "bar"
+    assert "pie" not in build_chart_spec(["month", "revenue"], months)["options"]      # 12 parts is too many
+    assert build_chart_spec(["weekday", "orders"], [[d, 5.0] for d in range(7)])["type"] == "bar"
+
+
+def test_other_whole_numbers_are_still_numbers():
+    assert build_chart_spec(["price", "quantity"], [[1.0, 2.0], [2.0, 4.0], [3.0, 6.0]])["type"] == "scatter"
+    assert build_chart_spec(["quarter", "revenue"], [[17.0, 1.0], [18.0, 2.0]])["type"] == "scatter"   # not 1-4
+
+
+def test_a_period_like_value_column_is_still_a_number():
+    rows = [["Summit Tentworks", 21], ["Alpine Textiles", 14], ["Vertical Supply", 28]]
+    assert build_chart_spec(["supplier", "lead_time_days"], rows)["type"] == "bar"
+
+
+def test_quarter_and_category_is_a_line_per_category():
+    rows = [[1, "Europe", 10.0], [1, "Asia Pacific", 5.0], [2, "Europe", 12.0]]
+    spec = build_chart_spec(["quarter", "region", "revenue"], rows)
+    assert (spec["type"], spec["x"], spec["series"]) == ("line", "quarter", "region")

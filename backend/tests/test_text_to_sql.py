@@ -53,3 +53,21 @@ def test_ask_sql_rejects_unsafe_sql_without_executing_it():
     assert r.json() == {"detail": "The generated query was rejected."}
     assert len(llm.prompts) == 1
     assert run_readonly(TrustedSQL("SELECT count(*) FROM orders"))["rows"] == [[12]]
+
+def test_prompt_says_chart_requests_are_data_questions():
+    from datetime import date as _date
+    from app.bi.text_to_sql import build_prompt as _build
+    import app.bi.text_to_sql as t2s
+    original = t2s.schema_text
+    t2s.schema_text = lambda role="analyst": "orders(id integer)"
+    try:
+        prompt = _build("revenue by quarter", _date(2026, 10, 15))
+    finally:
+        t2s.schema_text = original
+    assert "Requests to draw, chart or plot data are questions about this data" in prompt
+
+
+def test_answer_prompt_says_the_chart_is_drawn_automatically():
+    from app.bi.grounding import answer_prompt
+    p = answer_prompt("pie chart of revenue by quarter", "SELECT 1", {"columns": ["q"], "rows": [[1]], "truncated": False})
+    assert "drawn automatically" in p

@@ -25,8 +25,26 @@ LABELS = {
 }
 
 
-def _labels(values):
+MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def _period_labels(name, values):
+    """Quarter numbers become Q1 to Q4 and month numbers Jan to Dec (the backend treats both as categories)."""
+    if not values or not all(isinstance(v, (int, float)) and float(v).is_integer() for v in values):
+        return None
+    name = name.lower()
+    if "quarter" in name and all(1 <= v <= 4 for v in values):
+        return [f"Q{int(v)}" for v in values]
+    if "month" in name and all(1 <= v <= 12 for v in values):
+        return [MONTHS[int(v) - 1] for v in values]
+    return None
+
+
+def _labels(values, name=""):
     """Midnight timestamps from date_trunc become dates, or months when every one is the 1st."""
+    periods = _period_labels(name, list(values))
+    if periods:
+        return periods
     if not values or not all(isinstance(v, str) and MIDNIGHT.match(v) for v in values):
         return list(values)
     dates = pd.to_datetime([v[:10] for v in values])
@@ -62,19 +80,19 @@ def _one_series(kind, df, x, y):
     xt, yt = pretty_label(x), pretty_label(y)
     time = _is_time(list(df[x]))
     if kind in ("line", "area"):
-        df[x] = _dates(df[x]) if time else df[x]
+        df[x] = _dates(df[x]) if time else _labels(list(df[x]), x)
         fig = (px.area if kind == "area" else px.line)(df, x=x, y=y, markers=True, color_discrete_sequence=[BRAND])
         if time:
             fig.update_xaxes(type="date", tickformat="%b %Y")
         fig.update_traces(line={"width": 3}, marker={"size": 9}, hovertemplate=_hover(xt, yt))
         return _style(fig, xt, yt)
     if kind == "bar":
-        df[x] = _labels(list(df[x]))          # months read better as "Aug 2026" bars than a date axis
+        df[x] = _labels(list(df[x]), x)       # months read better as "Aug 2026" bars than a date axis
         fig = px.bar(df, x=x, y=y, color_discrete_sequence=[BRAND], text=y)
         fig.update_traces(texttemplate="%{y:,.0f}", textposition="outside", cliponaxis=False,
                           hovertemplate=_hover(xt, yt), marker_line_width=0)
         return _style(fig, xt, yt)
-    labels = _labels(list(df[x]))
+    labels = _labels(list(df[x]), x)
     if kind in ("pie", "donut"):
         fig = go.Figure(go.Pie(labels=labels, values=df[y], hole=0.55 if kind == "donut" else 0,
                                marker={"colors": PALETTE}, textinfo="label+percent", sort=False,

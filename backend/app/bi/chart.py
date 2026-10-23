@@ -13,6 +13,9 @@ MIN_DISTRIBUTION_ROWS = 10
 MAX_PIE_PARTS = 8
 MAX_RADAR_ROWS = 12
 STAGE_NAME = re.compile(r"stage|step|funnel", re.IGNORECASE)
+# Whole numbers that name a period, like EXTRACT(QUARTER ...), are categories, not measurements.
+PERIODS = [(re.compile(r"quarter|\bqtr\b"), 1, 4), (re.compile(r"month"), 1, 12), (re.compile(r"week(?!day)"), 1, 53),
+           (re.compile(r"weekday|day_of_week|dow"), 0, 7), (re.compile(r"hour"), 0, 23), (re.compile(r"day"), 1, 31)]
 
 
 def _is_number(v):
@@ -24,8 +27,12 @@ def _kind(name, values):
     if not present:
         return None
     if all(_is_number(v) for v in present):
-        if "year" in name.lower() and all(float(v).is_integer() and 1900 <= v <= 2100 for v in present):
+        whole = all(float(v).is_integer() for v in present)
+        if whole and "year" in name.lower() and all(1900 <= v <= 2100 for v in present):
             return "time"
+        for pattern, low, high in PERIODS:
+            if whole and pattern.search(name.lower()) and all(low <= v <= high for v in present):
+                return "period"
         return "number"
     if all(isinstance(v, str) for v in present):
         if all(DATE_LIKE.match(v) for v in present):
@@ -60,6 +67,8 @@ def build_chart_spec(columns, rows):
     kinds = [_kind(c, [r[i] for r in rows]) for i, c in enumerate(columns)]
     if None in kinds:
         return None
+    # A period only labels things; a period-like value column (lead_time_days) is a measurement.
+    kinds = [k if k != "period" or i == 0 else "number" for i, k in enumerate(kinds)]
     numbers = [c for c, k in zip(columns, kinds) if k == "number"]
     small = n <= MAX_CHART_ROWS
 
@@ -79,6 +88,9 @@ def build_chart_spec(columns, rows):
             return _spec(_category_options(values, time=True), x=a, y=b)
         if ka == "text" and small:
             return _spec(_category_options(values, label=a), x=a, y=b)
+        if ka == "period" and small:
+            options = _category_options(values, label=a)
+            return _spec(options[:1] + ["line", "area"] + options[1:], x=a, y=b)
         if ka == "number" and n <= MAX_POINT_ROWS:
             return _spec(["scatter"], x=a, y=b)
         return None
@@ -87,6 +99,8 @@ def build_chart_spec(columns, rows):
         (a, b, c), (ka, kb, kc) = columns, kinds
         if ka == "text" and kb == kc == "time" and small:
             return _spec(["gantt"], x=a, start=b, end=c)
+        if ka == "period" and kb in ("text", "country") and kc == "number" and small:
+            return _spec(["line", "area", "stacked_bar"], x=a, series=b, y=c)
         if sorted((ka, kb)) in (["text", "time"], ["country", "time"]) and kc == "number" and small:
             time_col, cat_col = (a, b) if ka == "time" else (b, a)
             return _spec(["line", "area", "stacked_bar"], x=time_col, series=cat_col, y=c)

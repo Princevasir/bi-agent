@@ -149,3 +149,13 @@ def test_a_type_that_was_not_offered_draws_nothing():
 
 def test_an_older_spec_without_options_still_draws_its_type():
     assert traces(build_figure({"type": "bar", "x": "region", "y": "revenue"}, *CAT)) == ["bar"]
+
+
+def test_period_numbers_get_readable_labels():
+    quarters = (["quarter", "revenue"], [[1.0, 6.5], [2.0, 10.5], [3.0, 11.1], [4.0, 12.8]])
+    spec = {"type": "bar", "options": ["bar", "line", "area", "pie"], "x": "quarter", "y": "revenue"}
+    assert list(build_figure(spec, *quarters).data[0].x) == ["Q1", "Q2", "Q3", "Q4"]
+    assert list(build_figure(spec, *quarters, kind="pie").data[0].labels) == ["Q1", "Q2", "Q3", "Q4"]
+    assert list(build_figure(spec, *quarters, kind="line").data[0].x) == ["Q1", "Q2", "Q3", "Q4"]
+    months = (["month", "revenue"], [[1, 5.0], [2, 6.0]])
+    assert list(build_figure({"type": "bar", "x": "month", "y": "revenue"}, *months).data[0].x) == ["Jan", "Feb"]

@@ -37,6 +37,8 @@ def build_prompt(question: str, today: date, role: str = "analyst") -> str:
         "Prefer the metric definitions. Use explicit date ranges. "
         "Any question about this data, including rankings, comparisons, totals and "
         "top or bottom values, must get a SELECT. "
+        "Requests to draw, chart or plot data are questions about this data and must get a SELECT; "
+        "the chart is drawn automatically from the result. "
         f"Only if the message is not a question about this data (for example a greeting or "
         f"small talk) or asks to change or delete data, return exactly {NO_QUERY} instead.\n\n"
         f"Today's date: {today.isoformat()}\n\n"

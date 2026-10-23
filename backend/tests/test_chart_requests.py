@@ -122,3 +122,9 @@ def test_a_chart_change_with_nothing_to_redraw_says_so(monkeypatch):
     r = client.post("/ask", json={"message": "make it a pie chart"})
     assert r.status_code == 200
     assert "no earlier result" in r.json()["answer"].lower() and llm.prompts == []
+
+
+def test_no_chart_note_when_there_is_no_result(monkeypatch):
+    monkeypatch.setattr(service, "generate_sql", lambda q, g, t, **kw: "NO_QUERY")
+    out = service.answer_question("draw a pie chart", lambda p: "", date(2026, 10, 15))
+    assert out["rows"] == [] and out["chart_note"] is None
