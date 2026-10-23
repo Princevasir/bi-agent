@@ -259,7 +259,7 @@ svg text{font-family:inherit}
       <tr><td>The model writes invalid or unsafe SQL</td><td>One automatic repair using the error; if that fails, "The generated query was rejected." (422)</td></tr>
       <tr><td>The model returns text instead of SQL</td><td>Treated as a rejection, never executed</td></tr>
       <tr><td>The model declines a real data question</td><td>One second opinion; then a friendly explanation of what it can answer</td></tr>
-      <tr><td>The model times out or is rate-limited</td><td>504 or 429 with a plain message; details in the log with the request ID</td></tr>
+      <tr><td>The model times out or is rate-limited</td><td>With a fallback configured, the local model answers instead (logged); otherwise 504 or 429 with a plain message</td></tr>
       <tr><td>The model invents a number in its sentence</td><td>The grounding check replaces it with a plain answer built from the rows</td></tr>
       <tr><td>The embedding model or knowledge index is down</td><td>The question is answered without knowledge; a warning is logged</td></tr>
       <tr><td>The database is down or slow</td><td>503 or 504; statement timeout; <code>/ready</code> reports which database is down</td></tr>
@@ -346,7 +346,7 @@ open http://localhost:8501</pre>
     <tbody>
       <tr><td>Conversations in memory (100 conversations, 20 turns each)</td><td>One backend process</td><td>Store them in Postgres so any instance can answer a follow-up</td></tr>
       <tr><td>Sign-in throttle and token budget per process</td><td>One process enforces both exactly</td><td>Move both to Postgres, so limits hold across instances</td></tr>
-      <tr><td>Local 7B model, 20 to 40 seconds per answer</td><td>Free and private</td><td>A hosted model (Groq is already supported); queue or stream long answers</td></tr>
+      <tr><td>Local 7B model, 20 to 40 seconds per answer</td><td>Free and private; optional Groq fast mode (about 2 s) falls back to it</td><td>A paid hosted tier as primary, the local model as fallback; stream long answers</td></tr>
       <tr><td>Whole role schema in every SQL prompt (about 4,700 tokens)</td><td>29 tables fit the context</td><td>Retrieve only the relevant tables per question (planned RAG R6b schema pruning)</td></tr>
       <tr><td>Rows capped at 200 per answer, 5-second statement timeout</td><td>Already bounded</td><td>Unchanged: the limits are what keeps large databases safe</td></tr>
     </tbody>
@@ -365,7 +365,7 @@ open http://localhost:8501</pre>
       <tr><td>D3</td><td>Sources and a "How I answered" panel in the UI</td><td>RAG: source citation; agents visible</td><td><span class="tag t-ok">done</span></td></tr>
       <tr><td>D4</td><td>Setup in three commands</td><td>Code quality: run it in 3 commands</td><td><span class="tag t-ok">done</span></td></tr>
       <tr><td>D5</td><td>A token budget that cannot end the demo</td><td>Cost controls without breaking the demo</td><td><span class="tag t-ok">done</span></td></tr>
-      <tr><td>D6</td><td>Fast demo model (Groq), local model as fallback</td><td>Demo reliability</td><td><span class="tag t-brand">planned</span></td></tr>
+      <tr><td>D6</td><td>Fast demo model (Groq), local model as fallback</td><td>Demo reliability</td><td><span class="tag t-ok">done</span></td></tr>
       <tr><td>D7</td><td>Answers from knowledge alone, with citations</td><td>RAG adds real value</td><td><span class="tag t-brand">planned</span></td></tr>
       <tr><td>D8</td><td>Automated dry run of the demo scenarios on retail data</td><td>5+ test scenarios; break your own system</td><td><span class="tag t-brand">planned</span></td></tr>
       <tr><td>D9</td><td>Retry with backoff and a circuit breaker for the models</td><td>Retry logic, fallbacks, circuit breakers</td><td><span class="tag t-brand">planned</span></td></tr>

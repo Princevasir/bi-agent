@@ -78,6 +78,7 @@ The full list of what the project offers today. Keep it current as features land
 - One-line JSON logs with request ID, user, path, status and time; `X-Request-ID` is accepted and returned on every response.
 - `GET /health` (liveness) and `GET /ready` (both databases reachable).
 - No runaway loops: every question stops within 15 workflow steps (`max_steps` in the policy file; the longest normal path takes 13), on top of the one-repair and one-second-opinion counters. A stopped run returns 422 with a plain message and is audited as `step_limit`.
+- Optional fast mode with a fallback: `LLM_PROVIDER=groq` and `LLM_FALLBACK_PROVIDER=ollama` answer a retail question in about 2 seconds on Groq, and switch to the local model when Groq fails or is rate-limited (logged as `llm_fallback`).
 - Timeouts, an output-token cap and a rolling hourly token budget for model calls, in total and per user, which refills on its own ("The question limit for this hour has been reached" when used up); model and database failures return clear, generic errors.
 - The whole stack starts with one `docker compose up`.
 
@@ -213,6 +214,8 @@ Set in `.env`; defaults come from `docker-compose.yml`.
 | `OPENROUTER_MODEL` | `qwen/qwen-2.5-coder-32b-instruct` | Any OpenRouter model slug |
 | `LLM_TIMEOUT_SECONDS` | 20 | Per LLM call |
 | `LLM_MAX_OUTPUT_TOKENS` | 512 | Per LLM call |
+| `LLM_FALLBACK_PROVIDER` | none | A second provider used when the first times out, is rate-limited or fails, e.g. `groq` first and `ollama` as fallback |
+| `GROQ_TIMEOUT_SECONDS`, `OLLAMA_TIMEOUT_SECONDS`, `OPENROUTER_TIMEOUT_SECONDS` | `LLM_TIMEOUT_SECONDS` | Per-provider timeout, so a hosted model can fail fast while the local fallback gets longer |
 | `LLM_TOKEN_BUDGET` | 400000 | Tokens per rolling hour, all users together; when reached, questions get a 429 until older usage expires |
 | `LLM_USER_TOKEN_BUDGET` | 150000 | Each user's share of the hourly budget (about 20 retail questions) |
 | `LLM_TOKEN_BUDGET_WINDOW_SECONDS` | 3600 | Length of the rolling budget window |

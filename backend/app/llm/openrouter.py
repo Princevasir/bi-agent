@@ -14,6 +14,7 @@ class OpenRouterLLM:
         self.model = model
         self.url = url
         self.max_tokens = max_tokens
+        self.timeout = timeout
         self.client = client or httpx.Client(
             headers={"Authorization": f"Bearer {api_key}"} if api_key else {},
             timeout=httpx.Timeout(timeout, connect=5.0),
