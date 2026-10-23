@@ -108,6 +108,7 @@ def show_answer(msg, index):
         with tabs["📊 Chart"]:
             st.plotly_chart(fig, width="stretch", key=f"chart-{index}",
                             config={"displaylogo": False})
+            st.session_state._charts_drawn += 1   # lets the tests check what was redrawn, and when
     with tabs["🧾 Table"]:
         df = pd.DataFrame(msg["rows"], columns=[pretty_label(c) for c in msg["columns"]])
         st.dataframe(df, hide_index=True, width="stretch")
@@ -166,11 +167,12 @@ st.markdown("## BI Agent")
 st.markdown('<p class="brand-sub">Answers from your company data. Every query is checked before it runs.</p>',
             unsafe_allow_html=True)
 
+# Draw everything already on screen before the slow backend call: Streamlit fades what it has
+# not redrawn yet, so asking first would grey out the whole conversation while it thinks.
+st.session_state._charts_drawn = 0
 question = st.chat_input("Ask a question about your data") or st.session_state.pop("pending", None)
-if question:
-    handle(question)
 
-if not st.session_state.messages:
+if not st.session_state.messages and not question:
     st.subheader("What would you like to know?")
     columns = st.columns(2)
     for i, q in enumerate(examples()):
@@ -182,3 +184,10 @@ for i, m in enumerate(st.session_state.messages):
             st.markdown(plain(m["content"]))
         else:
             show_answer(m, i)
+
+if question:
+    with st.chat_message("user", avatar="🧑"):
+        st.markdown(plain(question))
+    with st.chat_message("assistant", avatar="🏔️"):
+        handle(question)
+        show_answer(st.session_state.messages[-1], len(st.session_state.messages) - 1)

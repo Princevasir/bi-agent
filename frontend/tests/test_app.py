@@ -180,3 +180,20 @@ def test_theme_and_privacy_settings():
     config = tomllib.loads((FRONTEND / ".streamlit" / "config.toml").read_text())
     assert config["theme"]["primaryColor"]
     assert config["browser"]["gatherUsageStats"] is False
+
+
+def test_earlier_answers_are_drawn_before_a_new_question_is_sent(backend, monkeypatch):
+    """Streamlit fades whatever it has not redrawn yet; history must be redrawn before the slow call."""
+    import streamlit as st
+    at = signed_in_app()
+    at.chat_input[0].set_value("Revenue by region in September 2026?").run()
+    seen = {}
+    real = backend.post_json
+
+    def post_json(path, payload, timeout=90.0, token=None):
+        seen["charts_already_drawn"] = st.session_state.get("_charts_drawn", 0)
+        return real(path, payload, timeout, token)
+
+    monkeypatch.setattr(client, "post_json", post_json)
+    at.chat_input[0].set_value("Show revenue by month").run()
+    assert seen["charts_already_drawn"] == 1
