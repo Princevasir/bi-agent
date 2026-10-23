@@ -40,3 +40,9 @@ class LoginThrottle:
     def record_success(self, username):
         with self._lock:
             self._failures.pop(username, None)
+
+
+def from_env():
+    """In memory (one process) or in appdb (every instance, STATE_STORE=postgres; demo gap D11)."""
+    from app.appdb import PgLoginThrottle, state_store
+    return PgLoginThrottle() if state_store() == "postgres" else LoginThrottle()

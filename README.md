@@ -78,6 +78,7 @@ The full list of what the project offers today. Keep it current as features land
 - One-line JSON logs with request ID, user, path, status and time; `X-Request-ID` is accepted and returned on every response.
 - `GET /health` (liveness) and `GET /ready` (both databases reachable).
 - No runaway loops: every question stops within 15 workflow steps (`max_steps` in the policy file; the longest normal path takes 13), on top of the one-repair and one-second-opinion counters. A stopped run returns 422 with a plain message and is audited as `step_limit`.
+- Shared state for more than one backend instance: with `STATE_STORE=postgres` (the Compose default) conversations, sign-in lockouts and token spending live in `appdb` (`db/init/09_shared_state.sql`), so a follow-up can be answered by any instance and survives a backend restart.
 - Retry and circuit breaker for each model provider: one retry with a short pause for transient failures, and after three failures in a row the provider is skipped for a minute, so the fallback answers at once or users get a clear "temporarily unavailable" message instead of waiting on a dead service (logged as `llm_retry`, `llm_circuit_open`, `llm_circuit_closed`).
 - Optional fast mode with a fallback: `LLM_PROVIDER=groq` and `LLM_FALLBACK_PROVIDER=ollama` answer a retail question in about 2 seconds on Groq, and switch to the local model when Groq fails or is rate-limited (logged as `llm_fallback`).
 - Timeouts, an output-token cap and a rolling hourly token budget for model calls, in total and per user, which refills on its own ("The question limit for this hour has been reached" when used up); model and database failures return clear, generic errors.
@@ -221,6 +222,7 @@ Set in `.env`; defaults come from `docker-compose.yml`.
 | `GROQ_TIMEOUT_SECONDS`, `OLLAMA_TIMEOUT_SECONDS`, `OPENROUTER_TIMEOUT_SECONDS` | `LLM_TIMEOUT_SECONDS` | Per-provider timeout, so a hosted model can fail fast while the local fallback gets longer |
 | `LLM_RETRY_ATTEMPTS` | 2 | Attempts per model call for transient failures (throttling, 5xx, dropped connection); 1 switches retries off. Timeouts, configuration errors and our own budget are never retried |
 | `LLM_BREAKER_FAILURES`, `LLM_BREAKER_COOLDOWN_SECONDS` | 3, 60 | After this many failures in a row a provider is skipped for the cooldown (503, or the fallback answers at once); one trial call then closes or reopens the breaker |
+| `STATE_STORE` | `memory` (code), `postgres` (Compose) | Where conversations, the sign-in throttle and the token budget live: `postgres` shares them between backend instances and keeps conversations across restarts |
 | `LLM_TOKEN_BUDGET` | 400000 | Tokens per rolling hour, all users together; when reached, questions get a 429 until older usage expires |
 | `LLM_USER_TOKEN_BUDGET` | 150000 | Each user's share of the hourly budget (about 20 retail questions) |
 | `LLM_TOKEN_BUDGET_WINDOW_SECONDS` | 3600 | Length of the rolling budget window |

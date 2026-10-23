@@ -346,10 +346,9 @@ open http://localhost:8501</pre>
   <p class="kicker">Scale and known limits</p>
   <h2>What changes at 10x the load</h2>
   <div class="tablewrap"><table>
-    <thead><tr><th>Today</th><th>Why it is fine for the demo</th><th>At 10x (planned, D11)</th></tr></thead>
+    <thead><tr><th>Area</th><th>Today</th><th>At 10x</th></tr></thead>
     <tbody>
-      <tr><td>Conversations in memory (100 conversations, 20 turns each)</td><td>One backend process</td><td>Store them in Postgres so any instance can answer a follow-up</td></tr>
-      <tr><td>Sign-in throttle and token budget per process</td><td>One process enforces both exactly</td><td>Move both to Postgres, so limits hold across instances</td></tr>
+      <tr><td>Conversations, sign-in lockouts and token spending</td><td>Already in Postgres (<code>STATE_STORE=postgres</code>): any instance can answer a follow-up, and limits hold across instances</td><td>Add backend instances behind a load balancer; nothing else changes</td></tr>
       <tr><td>Local 7B model, 20 to 40 seconds per answer</td><td>Free and private; optional Groq fast mode (about 2 s) falls back to it</td><td>A paid hosted tier as primary, the local model as fallback; stream long answers</td></tr>
       <tr><td>Whole role schema in every SQL prompt (about 4,700 tokens)</td><td>29 tables fit the context</td><td>Retrieve only the relevant tables per question (planned RAG R6b schema pruning)</td></tr>
       <tr><td>Rows capped at 200 per answer, 5-second statement timeout</td><td>Already bounded</td><td>Unchanged: the limits are what keeps large databases safe</td></tr>
@@ -374,7 +373,7 @@ open http://localhost:8501</pre>
       <tr><td>D8</td><td>Automated dry run of the demo scenarios on retail data</td><td>5+ test scenarios; break your own system</td><td><span class="tag t-ok">done</span></td></tr>
       <tr><td>D9</td><td>Retry with backoff and a circuit breaker for the models</td><td>Retry logic, fallbacks, circuit breakers</td><td><span class="tag t-ok">done</span></td></tr>
       <tr><td>D10</td><td>MCP server with two tools</td><td>Optional (RAG already chosen)</td><td><span class="tag t-brand">optional</span></td></tr>
-      <tr><td>D11</td><td>Shared state for more than one backend instance</td><td>Scale thinking: 10x load</td><td><span class="tag t-brand">planned</span></td></tr>
+      <tr><td>D11</td><td>Shared state for more than one backend instance</td><td>Scale thinking: 10x load</td><td><span class="tag t-ok">done</span></td></tr>
     </tbody>
   </table></div>
 </div></section>

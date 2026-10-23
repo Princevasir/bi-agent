@@ -15,7 +15,8 @@ from app.access import AccessError, data_source, denied_columns, metric_rules, t
 from app.appdb import User, get_user
 from app.appdb import ping as appdb_ping
 from app.auth import AuthConfigError, authenticate, create_token, current_user
-from app.bi.conversation import MAX_STORED_ROWS, ConversationStore, Turn
+from app.bi import conversation
+from app.bi.conversation import MAX_STORED_ROWS, Turn
 from app.bi.schema import catalog_for, get_schema, metrics_for
 from app.bi.service import StepLimitError, answer_question
 from app.bi.sql_guard import SQLRejected, validate_sql
@@ -30,7 +31,7 @@ from app.llm.base import (
 from app.llm.budget import from_env as budget_from_env
 from app import policy
 from app.logging_setup import configure_logging
-from app.throttle import LoginThrottle
+from app import throttle as login_throttle
 
 configure_logging()
 logger = logging.getLogger("bi_agent")
@@ -39,8 +40,8 @@ logger.info("policy_loaded", extra={"policy_path": str(_policy.path), "policy_sh
 
 app = FastAPI(title="BI Agent API")
 budget = budget_from_env()
-store = ConversationStore()
-throttle = LoginThrottle()
+store = conversation.from_env()       # STATE_STORE: memory or postgres (demo gap D11)
+throttle = login_throttle.from_env()
 
 # Most specific first; LLMError is the catch-all.
 LLM_ERRORS = [

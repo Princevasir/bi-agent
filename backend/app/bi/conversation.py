@@ -43,3 +43,8 @@ class ConversationStore:
             self._data.move_to_end(conversation_id)
             while len(self._data) > self.max_conversations:
                 self._data.popitem(last=False)
+
+def from_env():
+    """In memory (one process) or in appdb (every instance, STATE_STORE=postgres; demo gap D11)."""
+    from app.appdb import PgConversationStore, state_store
+    return PgConversationStore() if state_store() == "postgres" else ConversationStore()

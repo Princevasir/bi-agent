@@ -73,6 +73,10 @@ docker compose up --build -d
 wait_ready
 note "Backend is ready."
 
+say "Applying database updates (safe to repeat)"
+docker compose exec -T db psql -q -U admin -d postgres -v ON_ERROR_STOP=1 < db/init/09_shared_state.sql >/dev/null
+note "Shared state tables are in place."
+
 say "Loading the retail demo data"
 ORDERS=$(docker compose exec -T db psql -U admin -d retail -Atc "SELECT count(*) FROM orders" 2>/dev/null || echo 0)
 if [ "${ORDERS:-0}" -gt 0 ] 2>/dev/null; then
