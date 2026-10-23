@@ -3,7 +3,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py client.py ./
+COPY app.py client.py charts.py presentation.py ./
+COPY .streamlit ./.streamlit
 RUN useradd --create-home appuser
 USER appuser
 EXPOSE 8501

@@ -1,0 +1,16 @@
+# Look and privacy settings for the Streamlit frontend.
+[theme]
+primaryColor = "#2F6B4F"            # forest green, also used for charts
+backgroundColor = "#FAFAF7"
+secondaryBackgroundColor = "#EEF3EF"
+textColor = "#1D2B24"
+font = "sans serif"
+
+[browser]
+gatherUsageStats = false            # Streamlit sends no usage statistics
+
+[client]
+toolbarMode = "minimal"
+
+[server]
+headless = true

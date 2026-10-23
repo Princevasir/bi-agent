@@ -61,6 +61,12 @@ The full list of what the project offers today. Keep it current as features land
 - Lockout after 5 failed sign-ins within 15 minutes, for 15 minutes.
 - Sign-in form, sign-out button and session-expired handling in the UI; the token never reaches the browser.
 
+### Interface
+- A branded, themed chat (Trailhead Outfitters) with a welcome screen of clickable example questions for your role, and the same examples in the sidebar.
+- Each answer as a headline with tabs for an interactive Plotly chart, the table and the SQL; single numbers get a big-number card; monthly results are labelled "Aug 2026" rather than timestamps.
+- Clear, distinct notes for declined questions, empty results, queries that were too broad or rejected, access denied, rate limits, timeouts and an unavailable model.
+- Streamlit's usage statistics are turned off.
+
 ### Reliability and operations
 - Append-only audit trail of sign-ins, failed and locked sign-ins, questions (text, SQL, row count), rejected queries and access denials. Passwords, tokens, results and answers are never recorded.
 - One-line JSON logs with request ID, user, path, status and time; `X-Request-ID` is accepted and returned on every response.
@@ -250,8 +256,11 @@ backend/
   retail/            retail demo data generator and loader
   tests/
 frontend/
-  app.py             Streamlit sign-in and chat
+  app.py             Streamlit sign-in, chat and layout
+  charts.py          Plotly figures from the backend's chart spec
+  presentation.py    labels, number formats, big-number card, status messages
   client.py          HTTP calls to the backend
+  .streamlit/        theme and privacy settings
   tests/
 db/init/             SQL run on first start: schema, seed data, roles, users database
 db/retail/           retail demo schema, foreign keys and indexes, read grants
