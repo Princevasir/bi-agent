@@ -67,6 +67,12 @@ The full list of what the project offers today. Keep it current as features land
 - Timeouts, an output-token cap and a total token budget for model calls; model and database failures return clear, generic errors.
 - The whole stack starts with one `docker compose up`.
 
+### Demo data
+- A generated retail dataset for a fictional outdoor-gear company, Trailhead Outfitters: 29 related tables in six business areas (sales, products, customers, supply chain, marketing and service, people), about 2.4 million rows from January 2024 to September 2026. Same seed, same data.
+- Realistic structure: a category tree, a manager hierarchy, price history, many-to-many product suppliers, guest orders, returns per item, weekly stock levels.
+- Planted business stories to discover, such as a late supplier delivery that empties tent stock and cuts March 2026 online revenue, a product recall, a promotion lift and a new store.
+- Access enforced by the database down to the column: analysts cannot read customer names, email, phone, street address or salaries; managers can; limited users see only geography and products.
+
 ### Testing and quality
 - Backend and frontend test suites; tests use a scripted model, so they are free and repeatable.
 - An evaluation dataset of 23 questions with known answers, including follow-ups, an empty result, four safety probes and three requests that should be declined, with a scoring harness that checks the real workflow's results rather than its SQL text. A runner asks the real model every question, can repeat each one, compares with a saved baseline, and fails on any safety problem or regression.
@@ -106,7 +112,16 @@ docker compose exec backend python -m app.cli create-user alice analyst
 
 The CLI prompts for a password (at least 12 characters). Then open http://localhost:8501, sign in, and ask a question. The API docs are at http://localhost:8000/docs.
 
-On the first start, Postgres runs the scripts in `db/init/` to create the sample data, the read-only roles, and the users database. They only run on an empty data volume.
+On the first start, Postgres runs the scripts in `db/init/` to create the sample data, the read-only roles, the users database, and the empty retail demo databases. They only run on an empty data volume.
+
+To fill the retail demo database (about 20 seconds, 350 MB):
+
+```bash
+cd backend
+.venv/bin/python -m retail.load --scale full     # or --scale small for a quick 1% version
+```
+
+The app still answers from the 12-row sample database for now; pointing it at the retail data comes with the data catalog (M29).
 
 ## Roles
 
@@ -218,12 +233,14 @@ backend/
     bi/              metrics, schema, text-to-SQL, SQL validator, workflow graph,
                      grounding, follow-up rewrite, chart rules, conversation store
   evals/             evaluation dataset (cases.json) and scoring harness
+  retail/            retail demo data generator and loader
   tests/
 frontend/
   app.py             Streamlit sign-in and chat
   client.py          HTTP calls to the backend
   tests/
 db/init/             SQL run on first start: schema, seed data, roles, users database
+db/retail/           retail demo schema, foreign keys and indexes, read grants
 docs/build-plan.html Roadmap, step-by-step guides, development log, known limits
 docker-compose.yml
 ```
