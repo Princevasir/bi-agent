@@ -15,6 +15,10 @@ class IndexError(Exception):
     """The index cannot be used as asked (bad schema name, mixed embedding models)."""
 
 
+class KnowledgeUnavailable(Exception):
+    """The index could not be searched (database down, schema missing); callers go on without knowledge."""
+
+
 def vector_literal(values):
     return "[" + ",".join(repr(float(v)) for v in values) + "]"
 
@@ -104,6 +108,9 @@ class Reader:
               AND (%(types)s::text[] IS NULL OR d.doc_type = ANY(%(types)s::text[]))
             ORDER BY c.embedding <=> %(v)s::vector
             LIMIT %(limit)s"""
-        with psycopg.connect(self.url, connect_timeout=5) as conn:
-            return conn.execute(sql, {"v": vector_literal(vector), "model": model, "role": role,
-                                      "types": list(types) if types else None, "limit": limit}).fetchall()
+        try:
+            with psycopg.connect(self.url, connect_timeout=5) as conn:
+                return conn.execute(sql, {"v": vector_literal(vector), "model": model, "role": role,
+                                          "types": list(types) if types else None, "limit": limit}).fetchall()
+        except psycopg.Error as e:
+            raise KnowledgeUnavailable(f"The knowledge index could not be searched: {type(e).__name__}") from e

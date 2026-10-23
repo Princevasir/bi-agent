@@ -16,7 +16,7 @@ os.environ.pop("DATA_SOURCE", None)   # tests choose the data source themselves
 
 from app.appdb import User  # noqa: E402
 from app.auth import current_user  # noqa: E402
-from app.main import app  # noqa: E402
+from app.main import app, get_knowledge  # noqa: E402
 from app import audit  # noqa: E402
 from app import main as main_module  # noqa: E402
 from app.throttle import LoginThrottle  # noqa: E402
@@ -25,6 +25,13 @@ from app.throttle import LoginThrottle  # noqa: E402
 @pytest.fixture(autouse=True)
 def signed_in_analyst():
     app.dependency_overrides[current_user] = lambda: User(username="test-analyst", role="analyst")
+    yield
+
+
+@pytest.fixture(autouse=True)
+def no_knowledge():
+    """RAG R6: tests never reach the embedding model or the real index unless they ask to."""
+    app.dependency_overrides[get_knowledge] = lambda: (lambda question, role: [])
     yield
 
 

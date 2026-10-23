@@ -25,6 +25,7 @@ from app.bi.text_to_sql import generate_sql, is_no_query
 from app.db import (DBAccessError, DBError, DBQueryError, DBTimeoutError, ResultTooLargeError, TrustedSQL,
                     run_readonly)
 from app.llm import get_llm
+from app.knowledge.context import knowledge_for
 from app.llm.base import (
     LLMConfigError, LLMError, LLMRateLimitError, LLMService, LLMTimeoutError,
 )
@@ -177,6 +178,11 @@ def make_generate(llm, request):
     return generate
 
 
+def get_knowledge():
+    """RAG R6: how /ask finds business knowledge; tests replace it (conftest) so they never call Ollama."""
+    return knowledge_for
+
+
 def conv_key(user, conversation_id):
     return f"{user.username}:{conversation_id}"
 
@@ -259,7 +265,8 @@ def ask_sql(body: ChatRequest, request: Request,
 @app.post("/ask")
 def ask(body: AskRequest, request: Request,
         user: User = Depends(signed_in),
-        llm: LLMService = Depends(get_llm)):
+        llm: LLMService = Depends(get_llm),
+        knowledge=Depends(get_knowledge)):
     if body.conversation_id is None:
         cid, history = store.new_id(), []
     else:
@@ -273,7 +280,7 @@ def ask(body: AskRequest, request: Request,
     if intent:
         return about_the_data(body.message, intent, history, cid, user, request)
     out = answer_question(body.message, make_generate(llm, request),
-                          date.today(), history, role=user.role)
+                          date.today(), history, role=user.role, knowledge=knowledge)
     store.add(conv_key(user, cid), Turn(
         question=body.message,
         sql=out["sql"],
@@ -285,13 +292,14 @@ def ask(body: AskRequest, request: Request,
                 conversation_id=cid, question=body.message,
                 interpreted_as=out["interpreted_as"], sql=out["sql"],
                 row_count=len(out["rows"]), truncated=out["truncated"],
-                answer_source=out["answer_source"], sql_repairs=out["sql_repairs"])
+                answer_source=out["answer_source"], sql_repairs=out["sql_repairs"],
+                sources=[s["document_id"] for s in out["sources"]])
     return {**out, "conversation_id": cid}
 
 
 def about_the_data(message, intent, history, cid, user, request):
     """M29c: questions about the data are answered from the role's catalog: no model, no SQL."""
-    out = {"question": message, "interpreted_as": message,
+    out = {"question": message, "interpreted_as": message, "sources": [],
            **catalog_answer(intent, catalog_for(user.role), metrics_for(user.role))}
     store.add(conv_key(user, cid), Turn(question=message, sql="", columns=out["columns"],
                                         rows=out["rows"][:MAX_STORED_ROWS], answer=out["answer"]))
@@ -331,7 +339,7 @@ def redraw(message, history, cid, user, request):
                                             rows=last.rows, answer=answer))
     audit_event(request, "chart_change", 200, conversation_id=cid, question=message,
                 chart=out["chart"] and out["chart"]["type"], row_count=len(out["rows"]))
-    return {**out, "conversation_id": cid}
+    return {**out, "sources": [], "conversation_id": cid}
 
 
 @app.get("/conversations/{conversation_id}")

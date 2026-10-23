@@ -36,6 +36,7 @@ class State(TypedDict, total=False):
     repairs: int
     repair: tuple
     decline_retries: int
+    knowledge: list
 
 
 def has_data(rows):
@@ -44,7 +45,7 @@ def has_data(rows):
     return not (len(rows) == 1 and any(v is None for v in rows[0]))
 
 
-def build_graph(generate):
+def build_graph(generate, knowledge=None):
     def rewrite(state):
         lines = generate(
             rewrite_prompt(state["question"], state["history"], state["today"])
@@ -52,9 +53,14 @@ def build_graph(generate):
         text = lines[0].strip()[:MAX_QUESTION_CHARS] if lines else ""
         return {"standalone": text or state["question"]}
 
+    def find_knowledge(state):
+        question = state.get("standalone") or state["question"]
+        return {"knowledge": knowledge(question, state["role"]) if knowledge else []}
+
     def write_sql(state):
         question = state.get("standalone") or state["question"]
-        sql = generate_sql(question, generate, state["today"], role=state["role"], repair=state.get("repair"))
+        sql = generate_sql(question, generate, state["today"], role=state["role"], repair=state.get("repair"),
+                           knowledge=state.get("knowledge"))
         return {"sql": sql, "repair": None}
 
     def retry_or_raise(state, failed_sql, reason, error):
@@ -115,7 +121,7 @@ def build_graph(generate):
         return {"answer": answer, "answer_source": source}
 
     def at_start(state):
-        return "rewrite" if state.get("history") else "write_sql"
+        return "rewrite" if state.get("history") else "find_knowledge"
 
     def after_write(state):
         if not is_no_query(state["sql"]):
@@ -135,6 +141,7 @@ def build_graph(generate):
 
     g = StateGraph(State)
     g.add_node("rewrite", rewrite)
+    g.add_node("find_knowledge", find_knowledge)
     g.add_node("write_sql", write_sql)
     g.add_node("check_sql", check_sql)
     g.add_node("execute", execute)
@@ -144,8 +151,9 @@ def build_graph(generate):
     g.add_node("declined", declined)
     g.add_node("second_opinion", second_opinion)
     g.add_edge("second_opinion", "write_sql")
-    g.add_conditional_edges(START, at_start, {"rewrite": "rewrite", "write_sql": "write_sql"})
-    g.add_edge("rewrite", "write_sql")
+    g.add_conditional_edges(START, at_start, {"rewrite": "rewrite", "find_knowledge": "find_knowledge"})
+    g.add_edge("rewrite", "find_knowledge")
+    g.add_edge("find_knowledge", "write_sql")
     g.add_conditional_edges("write_sql", after_write,
                             {"declined": "declined", "check_sql": "check_sql", "second_opinion": "second_opinion"})
     g.add_edge("declined", END)
@@ -159,9 +167,10 @@ def build_graph(generate):
     return g.compile()
 
 
-def answer_question(question, generate, today, history=None, role="analyst"):
+def answer_question(question, generate, today, history=None, role="analyst", knowledge=None):
+    """knowledge(question, role) returns retrieved documents for the SQL prompt (RAG R6), or None for none."""
     state = {"question": question, "today": today, "history": history or [], "role": role}
-    out = build_graph(generate).invoke(state)
+    out = build_graph(generate, knowledge).invoke(state)
     requested = requested_chart(question) if out["rows"] else None     # nothing to draw, nothing to explain
     chart, chart_note = apply_request(build_chart_spec(out["columns"], out["rows"]), requested)
     return {
@@ -177,4 +186,6 @@ def answer_question(question, generate, today, history=None, role="analyst"):
         "chart_note": chart_note,
         "sql_repairs": out.get("repairs", 0),
         "decline_retries": out.get("decline_retries", 0),
+        "sources": [{"document_id": h.document_id, "title": h.title, "doc_type": h.doc_type, "owner": h.owner,
+                     "version": h.version, "score": h.score} for h in out.get("knowledge") or []],
     }

@@ -87,6 +87,7 @@ The full list of what the project offers today. Keep it current as features land
 ### Business knowledge (RAG, in progress)
 - Index the knowledge pack (needs Ollama with `nomic-embed-text`: `ollama pull nomic-embed-text`): `cd backend && .venv/bin/python -m app.knowledge.ingest`. It is incremental: unchanged documents are skipped, changed ones re-embedded, deleted ones removed. Use `--rebuild` after changing the embedding model. The index lives in Postgres (`appdb`, schema `knowledge`).
 - A knowledge pack for Trailhead Outfitters in `backend/knowledge/`: metric definitions with owners and versions (including one conflicting definition and how it is resolved), versioned business rules such as the February-to-January fiscal year, validated SQL examples that the tests execute, dashboard documentation, data-quality notes and incident reports. Retrieval and use by the agent are being added step by step (see `docs/rag.html`).
+- Knowledge in answers (retail source): before writing SQL, the agent retrieves the business documents closest to the question (metric definitions, rules such as the February-to-January fiscal year, validated example queries) and gives them to the model as reference material, fenced and marked as not instructions. `/ask` returns them as `sources` and the audit trail records their IDs. If Ollama or the index is unavailable, the question is answered without knowledge and a warning is logged. The sample source never retrieves.
 - Retrieval (`app/knowledge/retrieval.py`): finds the chunks closest to a question, only from active documents shared with the user's role and embedded by the same model, all filtered in SQL. Settings are in the `[knowledge]` section of `backend/policy/guardrails.toml` (`top_k`, `min_similarity`, `max_context_tokens`). Measure it with `cd backend && APP_DATABASE_URL=postgresql://app_rw:app_dev_pw@localhost:5433/appdb .venv/bin/python -m evals.retrieval` (38 labelled questions; reports Recall@K, Precision@K, MRR and latency).
 
 ### Testing and quality
@@ -170,7 +171,7 @@ All routes except the first four need `Authorization: Bearer <token>` from `/aut
 | GET | `/hello` | Smoke test |
 | GET | `/ready` | Readiness: 200 when both databases answer, 503 otherwise |
 | POST | `/auth/login` | `{"username", "password"}` → access token and role |
-| POST | `/ask` | `{"message", "conversation_id"?}` → answer, SQL, rows, chart, conversation ID |
+| POST | `/ask` | `{"message", "conversation_id"?}` → answer, SQL, rows, chart, sources (knowledge documents used), conversation ID |
 | POST | `/ask/sql` | Generate and validate SQL for a question without running it (422 if the validator rejects it) |
 | GET | `/conversations/{id}` | Turns of one of your own conversations |
 | GET | `/schema` | Tables and columns your role can see |
