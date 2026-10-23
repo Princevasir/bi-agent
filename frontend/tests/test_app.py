@@ -383,3 +383,28 @@ def test_older_answers_without_sources_or_trace_show_neither(backend):
     at = ask_with(backend, REGIONS)
     assert not at.exception and "Sources:" not in all_text(at)
     assert not any(e.label.startswith("How I answered") for e in at.expander)
+
+
+# ---- D7: answers from the business documents --------------------------------------------------------------
+
+KNOWLEDGE_ANSWER = {
+    "question": "How is revenue defined?", "interpreted_as": "How is revenue defined?", "route": "knowledge",
+    "sql": "", "columns": [], "rows": [], "truncated": False, "chart": None, "chart_note": None,
+    "answer": "Revenue counts completed orders only [metric-revenue].", "answer_source": "knowledge",
+    "sources": [{"document_id": "metric-revenue", "title": "Revenue", "doc_type": "metric", "owner": "Sales Analytics",
+                 "version": 2, "score": 0.8}],
+    "trace": [{"agent": "Coordinator", "step": "route", "ms": 0.3}, {"agent": "Knowledge", "step": "find_knowledge", "ms": 50},
+              {"agent": "Analyst", "step": "explain_knowledge", "ms": 3900}, {"agent": "Analyst", "step": "check_citations", "ms": 0.2}],
+    "conversation_id": "c-1",
+}
+
+
+def test_a_knowledge_answer_shows_the_answer_its_sources_and_no_tabs(backend):
+    at = ask_with(backend, KNOWLEDGE_ANSWER, "How is revenue defined?")
+    assert not at.exception
+    assert any("Revenue counts completed orders only" in str(i.value) for i in at.info) or \
+        "Revenue counts completed orders only" in all_text(at)
+    assert "Sources: Revenue (metric, v2)" in all_text(at)
+    assert not at.tabs
+    [panel] = [e for e in at.expander if e.label.startswith("How I answered")]
+    assert "Checked that the answer cites the documents" in " ".join(str(m.value) for m in panel.markdown)

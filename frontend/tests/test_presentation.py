@@ -3,7 +3,7 @@ import pytest
 
 from client import BackendError
 from presentation import (DECLINE_PREFIX, format_number, is_declined, is_no_data, pretty_label, source_line,
-                          single_value, status_for, total_seconds, trace_lines)
+                          single_value, status_for, STEPS, total_seconds, trace_lines)
 
 
 @pytest.mark.parametrize("raw,pretty", [("revenue", "Revenue"), ("region_name", "Region name"),
@@ -92,8 +92,10 @@ def test_each_step_is_told_in_plain_words_with_its_time():
 
 def test_every_backend_step_has_a_plain_description():
     for step in ("route", "rewrite", "find_knowledge", "catalog_answer", "write_sql", "second_opinion", "check_sql",
+                 "explain_knowledge", "check_citations",
                  "execute", "declined", "explain", "ground", "no_rows", "draw", "redraw"):
-        assert trace_lines([{"agent": "X", "step": step, "ms": 1}])[0][1] != step
+        assert step in STEPS, step                              # a written description, not the fallback
+        assert trace_lines([{"agent": "X", "step": step, "ms": 1}])[0][1] == STEPS[step]
 
 
 def test_an_unknown_step_or_missing_time_still_shows():

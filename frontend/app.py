@@ -105,8 +105,10 @@ def show_answer(msg, index):
             st.code(msg["sql"], language="sql")
         how_i_answered(msg)
         return
-    if not msg.get("rows") and not msg.get("sql"):     # an answer about the data with nothing to list
-        st.info(msg["answer"], icon="ℹ️")
+    if not msg.get("rows") and not msg.get("sql"):     # from the catalog or the business documents
+        st.info(plain(msg["answer"]), icon="📘" if msg.get("route") == "knowledge" else "ℹ️")
+        if sources := source_line(msg.get("sources")):
+            st.caption(plain(sources))
         how_i_answered(msg)
         return
 

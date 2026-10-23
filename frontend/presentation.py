@@ -85,6 +85,8 @@ STEPS = {
     "no_rows": "Reported that no data matched",
     "draw": "Chose a chart for the result",
     "redraw": "Redrew the last result",
+    "explain_knowledge": "Answered from the business documents",
+    "check_citations": "Checked that the answer cites the documents and adds no numbers",
 }
 
 

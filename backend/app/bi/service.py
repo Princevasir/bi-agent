@@ -13,7 +13,8 @@ from langgraph.errors import GraphRecursionError
 from langgraph.graph import END, START, StateGraph
 
 from app import limits
-from app.agents import OWNER, analyst, chart, coordinator, knowledge, sql
+from app.agents import OWNER, analyst, chart, coordinator, sql
+from app.agents import knowledge as knowledge_agent
 from app.agents.analyst import has_data  # noqa: F401  (used by the evaluation harness)
 from app.agents.sql import NO_QUERY_ANSWER  # noqa: F401
 
@@ -54,10 +55,11 @@ class Context:
 
 STEPS = {
     "route": coordinator.route, "rewrite": coordinator.rewrite,
-    "find_knowledge": knowledge.find_knowledge, "catalog_answer": knowledge.catalog_answer,
+    "find_knowledge": knowledge_agent.find_knowledge, "catalog_answer": knowledge_agent.catalog_answer,
     "write_sql": sql.write_sql, "second_opinion": sql.second_opinion, "check_sql": sql.check_sql,
     "execute": sql.execute, "declined": sql.declined,
     "explain": analyst.explain, "ground": analyst.ground, "no_rows": analyst.no_rows,
+    "explain_knowledge": analyst.explain_knowledge, "check_citations": analyst.check_citations,
     "draw": chart.draw, "redraw": chart.redraw,
 }
 
@@ -81,7 +83,10 @@ def build_graph(generate, knowledge=None):
                             {"redraw": "redraw", "catalog_answer": "catalog_answer",
                              "rewrite": "rewrite", "find_knowledge": "find_knowledge"})
     g.add_edge("rewrite", "find_knowledge")
-    g.add_edge("find_knowledge", "write_sql")
+    g.add_conditional_edges("find_knowledge", knowledge_agent.after_find,
+                            {"explain_knowledge": "explain_knowledge", "catalog_answer": "catalog_answer",
+                             "write_sql": "write_sql"})
+    g.add_edge("explain_knowledge", "check_citations")
     g.add_conditional_edges("write_sql", sql.after_write,
                             {"declined": "declined", "check_sql": "check_sql", "second_opinion": "second_opinion"})
     g.add_edge("second_opinion", "write_sql")
@@ -91,7 +96,7 @@ def build_graph(generate, knowledge=None):
     g.add_edge("explain", "ground")
     g.add_edge("ground", "draw")
     g.add_edge("no_rows", "draw")
-    for last in ("draw", "redraw", "catalog_answer", "declined"):
+    for last in ("draw", "redraw", "catalog_answer", "declined", "check_citations"):
         g.add_edge(last, END)
     return g.compile()
 

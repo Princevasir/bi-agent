@@ -296,6 +296,9 @@ def ask(body: AskRequest, request: Request,
     if out["route"] == "chart_change":
         audit_event(request, "chart_change", 200, conversation_id=cid, question=body.message,
                     chart=out["chart"] and out["chart"]["type"], row_count=len(out["rows"]))
+    elif out["route"] == "knowledge":
+        audit_event(request, "knowledge_question", 200, conversation_id=cid, question=body.message,
+                    answer_source=out["answer_source"], sources=[s["document_id"] for s in out["sources"]])
     elif out["route"] == "catalog":
         audit_event(request, "catalog_question", 200, conversation_id=cid, question=body.message,
                     intent=out["intent"][0], subject=out["intent"][1], row_count=len(out["rows"]))

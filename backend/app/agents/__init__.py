@@ -20,7 +20,7 @@ AGENTS = [
     Agent("Coordinator", coordinator.JOB, ("route", "rewrite")),
     Agent("Knowledge", knowledge.JOB, ("find_knowledge", "catalog_answer")),
     Agent("SQL", sql.JOB, ("write_sql", "second_opinion", "check_sql", "execute", "declined")),
-    Agent("Analyst", analyst.JOB, ("explain", "ground", "no_rows")),
+    Agent("Analyst", analyst.JOB, ("explain", "ground", "no_rows", "explain_knowledge", "check_citations")),
     Agent("Chart", chart.JOB, ("draw", "redraw")),
 ]
 

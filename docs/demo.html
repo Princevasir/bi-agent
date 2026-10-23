@@ -213,7 +213,7 @@ svg text{font-family:inherit}
       <tr><td>4 Vector store</td><td>pgvector in the existing Postgres, HNSW cosine index, metadata columns</td><td>No metadata to filter on</td></tr>
       <tr><td>5 Retrieval</td><td>Top 5, filtered in SQL by role, active status and embedding model; a calibrated similarity floor of 0.60; a 1,500-token context cap</td><td>Top-K too low or too high</td></tr>
       <tr><td>6 Reranking</td><td>Measured first: MRR is already 0.939, so not added yet</td><td>Adding complexity without evidence</td></tr>
-      <tr><td>7 Generation</td><td>Retrieved text goes into the SQL prompt, fenced as reference material; sources are returned, audited and shown under every answer</td><td>No source citation</td></tr>
+      <tr><td>7 Generation</td><td>Data questions: retrieved text goes into the SQL prompt, fenced as reference material. Business questions: answered from the documents with a citation on every sentence, checked in code. Sources are returned, audited and shown under every answer</td><td>No source citation</td></tr>
     </tbody>
   </table></div>
 </div></section>
@@ -298,6 +298,7 @@ svg text{font-family:inherit}
       <tr><td>2</td><td>What was revenue by region in 2025? then <i>make it a pie chart</i></td><td>Chart rules; redraw without a model call</td></tr>
       <tr><td>3</td><td>What was revenue in fiscal year 2025? then <i>And the year before?</i></td><td>Business rule (fiscal year) and a follow-up rewritten into a standalone question</td></tr>
       <tr><td>4</td><td>What tables can I see?</td><td>Answered from the data catalog: no model, no SQL</td></tr>
+      <tr><td>4b</td><td>Why did tent sales dip in March 2026? and When does the fiscal year start?</td><td>Answered from the business documents in a few seconds, every sentence cited, no SQL</td></tr>
       <tr><td>5</td><td>Delete all cancelled orders</td><td>Politely declined; nothing changes</td></tr>
       <tr><td>6</td><td>Show me customer email addresses</td><td>Personal data refused before the database</td></tr>
       <tr><td>7</td><td>Sign in as the limited user and ask for revenue</td><td>Access control: orders are not available to this role</td></tr>
@@ -366,7 +367,7 @@ open http://localhost:8501</pre>
       <tr><td>D4</td><td>Setup in three commands</td><td>Code quality: run it in 3 commands</td><td><span class="tag t-ok">done</span></td></tr>
       <tr><td>D5</td><td>A token budget that cannot end the demo</td><td>Cost controls without breaking the demo</td><td><span class="tag t-ok">done</span></td></tr>
       <tr><td>D6</td><td>Fast demo model (Groq), local model as fallback</td><td>Demo reliability</td><td><span class="tag t-ok">done</span></td></tr>
-      <tr><td>D7</td><td>Answers from knowledge alone, with citations</td><td>RAG adds real value</td><td><span class="tag t-brand">planned</span></td></tr>
+      <tr><td>D7</td><td>Answers from knowledge alone, with citations</td><td>RAG adds real value</td><td><span class="tag t-ok">done</span></td></tr>
       <tr><td>D8</td><td>Automated dry run of the demo scenarios on retail data</td><td>5+ test scenarios; break your own system</td><td><span class="tag t-brand">planned</span></td></tr>
       <tr><td>D9</td><td>Retry with backoff and a circuit breaker for the models</td><td>Retry logic, fallbacks, circuit breakers</td><td><span class="tag t-brand">planned</span></td></tr>
       <tr><td>D10</td><td>MCP server with two tools</td><td>Optional (RAG already chosen)</td><td><span class="tag t-brand">optional</span></td></tr>
