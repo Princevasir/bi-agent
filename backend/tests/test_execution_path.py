@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from app import db
 from app.bi import service
+from app.agents import sql as sql_agent
 from app.bi.sql_guard import ValidatedSQL, validate_sql
 from app.db import TrustedSQL, UnvalidatedSQLError, run_readonly
 from app.llm import get_llm
@@ -62,7 +63,7 @@ def test_workflow_executes_only_validated_sql(monkeypatch):
         seen.append(sql)
         return {"columns": ["n"], "rows": [[3]], "truncated": False}
 
-    monkeypatch.setattr(service, "run_readonly", run)
+    monkeypatch.setattr(sql_agent, "run_readonly", run)
     llm = RoutedLLM("SELECT count(*) AS n FROM regions", answer="There are 3 regions.")
     service.answer_question("How many regions?", lambda p: llm.generate(p).text, date(2026, 10, 15))
     assert len(seen) == 1 and isinstance(seen[0], ValidatedSQL)

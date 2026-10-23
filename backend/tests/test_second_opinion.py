@@ -7,6 +7,7 @@ import pytest
 
 from app import limits
 from app.bi import service
+from app.agents import sql as sql_agent
 from app.bi.catalog_answers import asks_for_personal_data, worth_a_second_opinion
 from app.bi.sql_guard import PERSONAL_DATA_MESSAGE, SQLRejected
 
@@ -28,7 +29,7 @@ class Model:
 
 @pytest.fixture
 def db(monkeypatch):
-    monkeypatch.setattr(service, "run_readonly", lambda sql, **kw: ROWS)
+    monkeypatch.setattr(sql_agent, "run_readonly", lambda sql, **kw: ROWS)
 
 
 # ---- which declines deserve a second opinion ------------------------------------------------------------
@@ -92,8 +93,8 @@ def test_second_opinions_can_be_switched_off_but_not_raised(db, monkeypatch):
 
 
 def test_personal_data_nobody_asked_for_is_left_out_on_a_retry(db, monkeypatch):
-    monkeypatch.setattr(service, "tables_for", lambda role: ("customers", "loyalty_memberships"))
-    monkeypatch.setattr(service, "denied_columns", lambda role: frozenset({("customers", "email")}))
+    monkeypatch.setattr(sql_agent, "tables_for", lambda role: ("customers", "loyalty_memberships"))
+    monkeypatch.setattr(sql_agent, "denied_columns", lambda role: frozenset({("customers", "email")}))
     model = Model("SELECT c.customer_id, c.email FROM customers c",
                   "SELECT c.customer_id FROM customers c")
     out = service.answer_question("show me sample data for loyal customers", model, TODAY)
@@ -102,8 +103,8 @@ def test_personal_data_nobody_asked_for_is_left_out_on_a_retry(db, monkeypatch):
 
 
 def test_personal_data_the_user_asked_for_is_refused_without_a_retry(db, monkeypatch):
-    monkeypatch.setattr(service, "tables_for", lambda role: ("customers",))
-    monkeypatch.setattr(service, "denied_columns", lambda role: frozenset({("customers", "email")}))
+    monkeypatch.setattr(sql_agent, "tables_for", lambda role: ("customers",))
+    monkeypatch.setattr(sql_agent, "denied_columns", lambda role: frozenset({("customers", "email")}))
     model = Model("SELECT email FROM customers", "SELECT customer_id FROM customers")
     with pytest.raises(SQLRejected) as e:
         service.answer_question("show customer emails", model, TODAY)

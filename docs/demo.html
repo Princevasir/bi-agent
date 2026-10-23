@@ -115,12 +115,12 @@ svg text{font-family:inherit}
       <rect x="520" y="35" width="180" height="90" rx="10" fill="var(--card)" stroke="var(--line)"/>
       <text x="610" y="66" text-anchor="middle" fill="var(--ink)" font-weight="700">FastAPI /ask</text>
       <text x="610" y="86" text-anchor="middle" fill="var(--muted)">JWT auth, role lookup,</text>
-      <text x="610" y="104" text-anchor="middle" fill="var(--muted)">router, audit, budget</text>
+      <text x="610" y="104" text-anchor="middle" fill="var(--muted)">conversations, audit, budget</text>
 
       <rect x="420" y="175" width="380" height="155" rx="12" fill="var(--brand-soft)" stroke="var(--brand)"/>
-      <text x="610" y="200" text-anchor="middle" fill="var(--brand)" font-weight="700">LangGraph workflow (orchestration)</text>
-      <text x="610" y="226" text-anchor="middle" fill="var(--ink)">rewrite → find knowledge → write SQL</text>
-      <text x="610" y="250" text-anchor="middle" fill="var(--ink)">→ validate → execute → explain → ground</text>
+      <text x="610" y="200" text-anchor="middle" fill="var(--brand)" font-weight="700">LangGraph: coordinator and agents</text>
+      <text x="610" y="226" text-anchor="middle" fill="var(--ink)">Coordinator → Knowledge → SQL</text>
+      <text x="610" y="250" text-anchor="middle" fill="var(--ink)">→ Analyst → Chart (five agents)</text>
       <text x="610" y="276" text-anchor="middle" fill="var(--muted)">one bounded repair · one second opinion</text>
       <text x="610" y="298" text-anchor="middle" fill="var(--muted)">deterministic chart rules</text>
 
@@ -156,8 +156,8 @@ svg text{font-family:inherit}
     <thead><tr><th>Layer</th><th>In this project</th></tr></thead>
     <tbody>
       <tr><td><b>01 Interface</b></td><td>Streamlit chat UI (answer cards, Chart / Table / SQL tabs, data catalog page) and a FastAPI REST API (<code>/ask</code>, <code>/catalog</code>, <code>/ready</code>, ...)</td></tr>
-      <tr><td><b>02 Orchestration</b></td><td>A router in <code>/ask</code> (chart change, question about the data, or data question) and a LangGraph <code>StateGraph</code> with typed state and conditional edges</td></tr>
-      <tr><td><b>03 Agents</b></td><td>Specialists with one job each: rewriter, knowledge retriever, SQL writer, SQL validator, executor, explainer, grounding checker, chart builder. The LLM is used in three of them only.</td></tr>
+      <tr><td><b>02 Orchestration</b></td><td>A Coordinator agent inside a LangGraph <code>StateGraph</code> (typed state, conditional edges) routes every message: chart change, question about the data, or data question. A hard cap of 15 steps per question</td></tr>
+      <tr><td><b>03 Agents</b></td><td>Five specialists, one job each, one module each in <code>backend/app/agents/</code>: <b>Coordinator</b>, <b>Knowledge</b>, <b>SQL</b>, <b>Analyst</b>, <b>Chart</b>. Only the Coordinator, SQL and Analyst agents call the model; only the SQL agent touches the business database. Every answer carries a trace of which agent did each step.</td></tr>
       <tr><td><b>04 Data &amp; RAG</b></td><td>Retail database (29 tables) with a data catalog; 64 business documents chunked by type, embedded with <code>nomic-embed-text</code>, stored in pgvector, retrieved with metadata filters in SQL</td></tr>
       <tr><td><b>05 Infrastructure</b></td><td>Docker Compose, health and readiness checks, JSON logs with request IDs, an audit trail, a token budget, per-role database logins</td></tr>
     </tbody>
@@ -166,26 +166,25 @@ svg text{font-family:inherit}
 
 <!-- 5 -->
 <section class="slide"><div class="inner">
-  <p class="kicker">Orchestration pattern</p>
-  <h2>A sequential pipeline with conditional routing</h2>
-  <p class="lead">Chosen on purpose: the steps must happen in order, and every step is easy to test and debug. The flow is designed explicitly (LangGraph), not left to the model.</p>
-  <div class="card" style="margin-top:12px">
-    <div class="flow">
-      <span class="node det">Router</span><span class="arrow">→</span>
-      <span class="node llm">Rewriter</span><span class="arrow">→</span>
-      <span class="node det">Knowledge retriever</span><span class="arrow">→</span>
-      <span class="node llm">SQL writer</span><span class="arrow">→</span>
-      <span class="node det">SQL validator</span><span class="arrow">→</span>
-      <span class="node det">Executor</span><span class="arrow">→</span>
-      <span class="node llm">Explainer</span><span class="arrow">→</span>
-      <span class="node det">Grounding checker</span><span class="arrow">→</span>
-      <span class="node det">Chart builder</span>
-    </div>
-    <p class="legend"><span class="tag t-brand">LLM</span> uses the model · <span class="tag t-ok">code</span> deterministic Python. Branches: chart-only messages and questions about the data never call the model; a declined question gets one second opinion; a rejected or failed query gets one repair; no rows ends in a plain answer.</p>
+  <p class="kicker">Agents and orchestration</p>
+  <h2>Five specialist agents, routed by a coordinator</h2>
+  <div class="grid g3">
+    <div class="card"><span class="tag t-brand">LLM</span><h3>Coordinator</h3><p>Understands each message, rewrites follow-ups ("And August?") into a standalone question, and routes it to the right agents.</p></div>
+    <div class="card"><span class="tag t-ok">code</span><h3>Knowledge</h3><p>Finds the business knowledge a question needs (RAG) and answers questions about the data catalog.</p></div>
+    <div class="card"><span class="tag t-brand">LLM</span> <span class="tag t-ok">code</span><h3>SQL</h3><p>Writes one read-only query, has it validated (by code, never the model) and runs it on the role's login; one repair, one second opinion.</p></div>
+    <div class="card"><span class="tag t-brand">LLM</span> <span class="tag t-ok">code</span><h3>Analyst</h3><p>Explains the result in a sentence; if any number is not in the result, replaces it with a plain answer from the rows.</p></div>
+    <div class="card"><span class="tag t-ok">code</span><h3>Chart</h3><p>Chooses a chart by fixed rules and redraws the last result on request ("make it a pie chart") without the model.</p></div>
+    <div class="card"><h3>Pattern</h3><p>Sequential pipeline with conditional routing (LangGraph). Steps must happen in order, so this is the simplest pattern that fits, and each step is easy to test.</p></div>
   </div>
-  <div class="grid g2" style="margin-top:16px">
-    <div class="card"><h3>Why not a multi-agent free-for-all?</h3><p>A BI answer must be correct and safe. Letting the model choose tools would make authorisation depend on the model. Here, the LLM never decides what may run.</p></div>
-    <div class="card"><h3>Shared state</h3><p>LangGraph's typed state (question, standalone question, knowledge, SQL, rows, answer, repair counters) is passed from step to step and returned with the answer.</p></div>
+  <div class="card" style="margin-top:16px">
+    <div class="flow">
+      <span class="node llm">Coordinator</span><span class="arrow">→</span>
+      <span class="node det">Knowledge</span><span class="arrow">→</span>
+      <span class="node llm">SQL</span><span class="arrow">→</span>
+      <span class="node llm">Analyst</span><span class="arrow">→</span>
+      <span class="node det">Chart</span>
+    </div>
+    <p class="legend">Data question: all five. Chart change: Coordinator → Chart. Question about the data: Coordinator → Knowledge. Declined message: Coordinator → Knowledge → SQL. The LLM never decides what may run.</p>
   </div>
 </div></section>
 
@@ -194,10 +193,10 @@ svg text{font-family:inherit}
   <p class="kicker">Design decisions</p>
   <h2>The four decisions</h2>
   <div class="grid g2">
-    <div class="card"><h3>D1 Agent boundaries</h3><ul><li>SQL writer: turns a question into one SELECT</li><li>SQL validator: allows or rejects it (never the LLM)</li><li>Executor: runs it on the role's read-only login</li><li>Explainer: writes a sentence about the result; the grounding checker rejects invented numbers</li></ul></div>
+    <div class="card"><h3>D1 Agent boundaries</h3><ul><li>Each agent owns named graph steps; a test checks every step belongs to exactly one agent</li><li>Tests check that only the SQL agent touches the database, and that the Knowledge and Chart agents never call the model</li><li>The validator, not the model, decides what runs</li></ul></div>
     <div class="card"><h3>D2 Communication</h3><p>A shared typed state object (LangGraph <code>StateGraph</code> with a <code>TypedDict</code>). Conversations are kept per user for follow-ups ("And August?").</p></div>
     <div class="card"><h3>D3 Error boundaries</h3><ul><li>Bad SQL: one repair with the error, then a clear message</li><li>Model declines a real question: one second opinion</li><li>Knowledge index down: answer without knowledge</li><li>Model writes an ungrounded sentence: fall back to a plain answer from the rows</li></ul></div>
-    <div class="card"><h3>D4 Termination</h3><ul><li>Every loop has a counter from the policy file: <code>repair_attempts = 1</code>, <code>decline_retries = 1</code></li><li>A hard cap of <code>max_steps = 15</code> workflow steps per question (the longest normal path takes 11); a run that reaches it is stopped and audited</li><li>Stops when the output validates, when no rows come back, or when the question is declined</li><li>Timeouts on the model and the database</li></ul></div>
+    <div class="card"><h3>D4 Termination</h3><ul><li>Every loop has a counter from the policy file: <code>repair_attempts = 1</code>, <code>decline_retries = 1</code></li><li>A hard cap of <code>max_steps = 15</code> workflow steps per question (the longest normal path takes 13); a run that reaches it is stopped and audited</li><li>Stops when the output validates, when no rows come back, or when the question is declined</li><li>Timeouts on the model and the database</li></ul></div>
   </div>
 </div></section>
 

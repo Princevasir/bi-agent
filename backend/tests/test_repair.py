@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from app import limits
 from app.bi import service
+from app.agents import sql as sql_agent
 from app.bi.sql_guard import SQLRejected
 from app.db import DBAccessError, DBQueryError, DBTimeoutError
 from app.llm import get_llm
@@ -48,7 +49,7 @@ def runs(monkeypatch, *outcomes):
             raise outcome
         return outcome
 
-    monkeypatch.setattr(service, "run_readonly", run)
+    monkeypatch.setattr(sql_agent, "run_readonly", run)
     return calls
 
 
@@ -110,8 +111,8 @@ def test_rule_violations_are_never_retried(monkeypatch, bad):
 
 def test_personal_data_is_never_retried(monkeypatch):
     runs(monkeypatch, ROWS)
-    monkeypatch.setattr(service, "tables_for", lambda role: ("customers",))
-    monkeypatch.setattr(service, "denied_columns", lambda role: frozenset({("customers", "email")}))
+    monkeypatch.setattr(sql_agent, "tables_for", lambda role: ("customers",))
+    monkeypatch.setattr(sql_agent, "denied_columns", lambda role: frozenset({("customers", "email")}))
     model = Model("SELECT email FROM customers", "SELECT customer_id FROM customers")
     with pytest.raises(SQLRejected):
         service.answer_question("emails", model, TODAY)

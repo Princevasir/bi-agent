@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.bi import service
+from app.agents import sql as sql_agent
 from app.bi.chart import apply_request, build_chart_spec, is_chart_only, requested_chart
 from app.llm import get_llm
 from app.main import app
@@ -88,7 +89,7 @@ def test_a_request_when_no_chart_fits_is_explained():
 # ---- through the workflow and the API -----------------------------------------------------------
 
 def test_answer_uses_the_requested_chart(monkeypatch):
-    monkeypatch.setattr(service, "run_readonly", lambda sql, **kw: {
+    monkeypatch.setattr(sql_agent, "run_readonly", lambda sql, **kw: {
         "columns": REGIONS[0], "rows": REGIONS[1], "truncated": False})
     llm = RoutedLLM(REGION_SQL, answer="South led with 300.")
     out = service.answer_question("Show revenue by region as a pie chart", lambda p: llm.generate(p).text,
@@ -106,7 +107,7 @@ def test_make_it_a_donut_redraws_the_last_result_without_a_query(monkeypatch, au
     def no_query(*a, **kw):
         raise AssertionError("must not run a query")
 
-    monkeypatch.setattr(service, "run_readonly", no_query)
+    monkeypatch.setattr(sql_agent, "run_readonly", no_query)
     r = client.post("/ask", json={"message": "make it a donut", "conversation_id": first["conversation_id"]})
     assert r.status_code == 200
     body = r.json()
@@ -125,6 +126,6 @@ def test_a_chart_change_with_nothing_to_redraw_says_so(monkeypatch):
 
 
 def test_no_chart_note_when_there_is_no_result(monkeypatch):
-    monkeypatch.setattr(service, "generate_sql", lambda q, g, t, **kw: "NO_QUERY")
+    monkeypatch.setattr(sql_agent, "generate_sql", lambda q, g, t, **kw: "NO_QUERY")
     out = service.answer_question("draw a pie chart", lambda p: "", date(2026, 10, 15))
     assert out["rows"] == [] and out["chart_note"] is None

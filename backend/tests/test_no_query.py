@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.bi import service
+from app.agents import sql as sql_agent
 from app.bi.text_to_sql import NO_QUERY, build_prompt, is_no_query
 from app.llm import get_llm
 from app.main import app
@@ -37,13 +38,13 @@ def test_prompt_tells_the_model_how_to_decline():
 
 
 def test_a_declined_question_never_validates_or_runs_a_query(monkeypatch):
-    monkeypatch.setattr(service, "generate_sql", lambda q, g, t, **kw: "NO_QUERY")
+    monkeypatch.setattr(sql_agent, "generate_sql", lambda q, g, t, **kw: "NO_QUERY")
 
     def fail(*args, **kwargs):
         raise AssertionError("must not run")
 
-    monkeypatch.setattr(service, "validate_sql", fail)
-    monkeypatch.setattr(service, "run_readonly", fail)
+    monkeypatch.setattr(sql_agent, "validate_sql", fail)
+    monkeypatch.setattr(sql_agent, "run_readonly", fail)
     out = service.answer_question("hello", fail, TODAY)
     assert out["sql"] == "" and out["rows"] == [] and out["columns"] == []
     assert out["answer"] == service.NO_QUERY_ANSWER

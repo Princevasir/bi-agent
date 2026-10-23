@@ -12,14 +12,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app import audit
 from app.access import AccessError, data_source, denied_columns, metric_rules, tables_for
-from app.bi.catalog_answers import answer as catalog_answer, catalog_question
 from app.appdb import User, get_user
 from app.appdb import ping as appdb_ping
 from app.auth import AuthConfigError, authenticate, create_token, current_user
 from app.bi.conversation import MAX_STORED_ROWS, ConversationStore, Turn
 from app.bi.schema import catalog_for, get_schema, metrics_for
 from app.bi.service import StepLimitError, answer_question
-from app.bi.chart import NAMES as CHART_NAMES, apply_request, build_chart_spec, is_chart_only, requested_chart
 from app.bi.sql_guard import SQLRejected, validate_sql
 from app.bi.text_to_sql import generate_sql, is_no_query
 from app.db import (DBAccessError, DBError, DBQueryError, DBTimeoutError, ResultTooLargeError, TrustedSQL,
@@ -282,37 +280,30 @@ def ask(body: AskRequest, request: Request,
         history = store.get(conv_key(user, cid))
         if history is None:
             raise HTTPException(status_code=404, detail="Conversation not found.")
-    if is_chart_only(body.message):
-        return redraw(body.message, history, cid, user, request)
-    intent = catalog_question(body.message, None)      # by wording only; no database call yet
-    if intent:
-        return about_the_data(body.message, intent, history, cid, user, request)
     out = answer_question(body.message, make_generate(llm, request),
                           date.today(), history, role=user.role, knowledge=knowledge)
-    store.add(conv_key(user, cid), Turn(
-        question=body.message,
-        sql=out["sql"],
-        columns=out["columns"],
-        rows=out["rows"][:MAX_STORED_ROWS],
-        answer=out["answer"],
-    ))
-    audit_event(request, "ask", 200,
-                conversation_id=cid, question=body.message,
-                interpreted_as=out["interpreted_as"], sql=out["sql"],
-                row_count=len(out["rows"]), truncated=out["truncated"],
-                answer_source=out["answer_source"], sql_repairs=out["sql_repairs"],
-                sources=[s["document_id"] for s in out["sources"]])
-    return {**out, "conversation_id": cid}
-
-
-def about_the_data(message, intent, history, cid, user, request):
-    """M29c: questions about the data are answered from the role's catalog: no model, no SQL."""
-    out = {"question": message, "interpreted_as": message, "sources": [],
-           **catalog_answer(intent, catalog_for(user.role), metrics_for(user.role))}
-    store.add(conv_key(user, cid), Turn(question=message, sql="", columns=out["columns"],
-                                        rows=out["rows"][:MAX_STORED_ROWS], answer=out["answer"]))
-    audit_event(request, "catalog_question", 200, conversation_id=cid, question=message,
-                intent=intent[0], subject=intent[1], row_count=len(out["rows"]))
+    if out["route"] != "chart_change" or out["rows"]:       # nothing to redraw stores nothing
+        store.add(conv_key(user, cid), Turn(
+            question=body.message,
+            sql=out["sql"],
+            columns=out["columns"],
+            rows=out["rows"][:MAX_STORED_ROWS],
+            answer=out["answer"],
+        ))
+    if out["route"] == "chart_change":
+        audit_event(request, "chart_change", 200, conversation_id=cid, question=body.message,
+                    chart=out["chart"] and out["chart"]["type"], row_count=len(out["rows"]))
+    elif out["route"] == "catalog":
+        audit_event(request, "catalog_question", 200, conversation_id=cid, question=body.message,
+                    intent=out["intent"][0], subject=out["intent"][1], row_count=len(out["rows"]))
+    else:
+        audit_event(request, "ask", 200,
+                    conversation_id=cid, question=body.message,
+                    interpreted_as=out["interpreted_as"], sql=out["sql"],
+                    row_count=len(out["rows"]), truncated=out["truncated"],
+                    answer_source=out["answer_source"], sql_repairs=out["sql_repairs"],
+                    sources=[s["document_id"] for s in out["sources"]],
+                    steps=[f"{t['agent']}.{t['step']}" for t in out["trace"]])
     return {**out, "conversation_id": cid}
 
 
@@ -322,32 +313,6 @@ def get_catalog(request: Request, user: User = Depends(signed_in)):
     audit_event(request, "catalog_view", 200)
     return {"source": data_source(), "tables": list(catalog_for(user.role).values()),
             "metrics": metrics_for(user.role)}
-
-
-NOTHING_TO_REDRAW = "There is no earlier result to redraw yet. Ask a question about your data first."
-
-
-def redraw(message, history, cid, user, request):
-    """F1c: "make it a pie chart" redraws the last result: no model call, no query."""
-    last = next((t for t in reversed(history) if t.rows), None)
-    requested = requested_chart(message)
-    if last is None:
-        out = {"question": message, "interpreted_as": message, "sql": "", "columns": [], "rows": [],
-               "truncated": False, "answer": NOTHING_TO_REDRAW, "answer_source": "fallback",
-               "chart": None, "chart_note": None}
-    else:
-        chart, note = apply_request(build_chart_spec(last.columns, last.rows), requested)
-        shown = chart["type"] if chart else None
-        answer = (f"Here is the same result as a {CHART_NAMES[shown]}." if shown == requested
-                  else "Here is the same result again.")
-        out = {"question": message, "interpreted_as": message, "sql": last.sql, "columns": last.columns,
-               "rows": last.rows, "truncated": False, "answer": answer, "answer_source": "chart_change",
-               "chart": chart, "chart_note": note}
-        store.add(conv_key(user, cid), Turn(question=message, sql=last.sql, columns=last.columns,
-                                            rows=last.rows, answer=answer))
-    audit_event(request, "chart_change", 200, conversation_id=cid, question=message,
-                chart=out["chart"] and out["chart"]["type"], row_count=len(out["rows"]))
-    return {**out, "sources": [], "conversation_id": cid}
 
 
 @app.get("/conversations/{conversation_id}")

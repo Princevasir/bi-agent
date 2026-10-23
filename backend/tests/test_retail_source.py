@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from app import access, catalog, policy
 from app.bi import schema, service
+from app.agents import sql as sql_agent
 from app.bi.sql_guard import PERSONAL_DATA_MESSAGE, SQLRejected, validate_sql
 from app.bi.text_to_sql import build_prompt, rules_text
 from app.llm import get_llm
@@ -172,7 +173,7 @@ def test_ask_for_personal_data_gets_a_clear_refusal(retail, loaded, monkeypatch,
     def no_query(*a, **kw):
         raise AssertionError("must not reach the database")
 
-    monkeypatch.setattr(service, "run_readonly", no_query)
+    monkeypatch.setattr(sql_agent, "run_readonly", no_query)
     app.dependency_overrides[get_llm] = lambda: RoutedLLM("SELECT email FROM customers")
     r = client.post("/ask", json={"message": "Show customer emails"})
     assert r.status_code == 422

@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from app import limits
 from app.bi import service
+from app.agents import sql as sql_agent
 from app.db import ResultTooLargeError, TrustedSQL, run_readonly
 from app.llm import get_llm
 from app.main import app
@@ -78,7 +79,7 @@ def test_too_large_result_gets_a_clear_message(monkeypatch, audit_events):
     def too_large(sql, **kw):
         raise ResultTooLargeError("one row is over the byte limit")
 
-    monkeypatch.setattr(service, "run_readonly", too_large)
+    monkeypatch.setattr(sql_agent, "run_readonly", too_large)
     app.dependency_overrides[get_llm] = lambda: RoutedLLM("SELECT name FROM regions")
     r = client.post("/ask", json={"message": "list regions"})
     assert r.status_code == 422

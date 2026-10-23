@@ -58,10 +58,11 @@ def test_the_environment_may_only_lower_the_step_limit(monkeypatch):
 
 @pytest.mark.integration
 def test_the_longest_legitimate_path_fits_within_the_limit():
-    # rewrite, find knowledge, decline, second opinion, rejected SQL, repair, execute, explain, ground
+    # route, rewrite, find knowledge, decline, second opinion, rejected SQL, repair, execute, explain, ground, draw
     llm = Scripted(["NO_QUERY", BAD, GOOD])
     out = run(llm, HISTORY)
     assert out["rows"] == [[1380]] and out["decline_retries"] == 1 and out["sql_repairs"] == 1
+    assert len(out["trace"]) == 13 < limits.workflow_max_steps()
 
 
 @pytest.mark.integration
@@ -86,7 +87,7 @@ def test_graph_runs_pass_the_limit_to_langgraph(monkeypatch):
     class Graph:
         def invoke(self, state, config=None):
             seen.update(config or {})
-            return {"sql": "", "columns": [], "rows": [], "truncated": False, "answer": "x",
+            return {"route": "data", "trace": [], "sql": "", "columns": [], "rows": [], "truncated": False, "answer": "x",
                     "answer_source": "fallback"}
 
     monkeypatch.setattr(service, "build_graph", lambda *a, **kw: Graph())

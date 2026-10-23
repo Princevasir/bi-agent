@@ -15,7 +15,7 @@ max_tables = 8              # table references per query, repeats counted (GR-SQ
 max_depth = 3               # how deeply SELECTs may be nested (GR-SQL-02)
 repair_attempts = 1         # retries after a fixable SQL failure; 0 switches repair off (GR-WF-01)
 decline_retries = 1         # second opinions when the model declines a question that mentions the data
-max_steps = 15              # workflow steps per question; the longest legitimate path takes 11 (demo gap D1)
+max_steps = 15              # workflow steps per question; the longest legitimate path takes 13 (demo gap D1)
 
 [sql.functions]
 # Only these functions may appear in generated SQL (GR-SQL-01). Typed functions are matched by

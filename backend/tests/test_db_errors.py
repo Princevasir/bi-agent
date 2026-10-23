@@ -3,6 +3,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.bi import service
+from app.agents import sql as sql_agent
 from app.db import DBAccessError, DBError, DBQueryError, TrustedSQL, run_readonly
 from app.llm import get_llm
 from app.main import app
@@ -49,7 +50,7 @@ def test_each_kind_gets_its_own_message(monkeypatch, audit_events, error, status
     def fail(*a, **kw):
         raise error
 
-    monkeypatch.setattr(service, "run_readonly", fail)
+    monkeypatch.setattr(sql_agent, "run_readonly", fail)
     app.dependency_overrides[get_llm] = lambda: RoutedLLM("SELECT name FROM regions")
     r = client.post("/ask", json={"message": "regions"})
     assert (r.status_code, r.json()["detail"]) == (status, detail)

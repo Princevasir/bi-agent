@@ -32,6 +32,7 @@ The chart type is chosen by fixed backend rules, never by the model.
 The full list of what the project offers today. Keep it current as features land.
 
 ### Asking questions
+- Five specialist agents with one job each (`backend/app/agents/`): the **Coordinator** routes each message and rewrites follow-ups, **Knowledge** finds business knowledge and answers questions about the data, **SQL** writes, validates and runs one read-only query, **Analyst** writes a grounded answer, **Chart** picks or redraws the chart. `/ask` returns a `trace` of which agent did each step, and the audit trail records it.
 - Ask about the data in plain English in a chat; the model writes the SQL (Qwen2.5 Coder 32B through OpenRouter, or any OpenRouter model via `OPENROUTER_MODEL`).
 - Governed metric definitions (`revenue`, `order_count`) guide the model so "revenue" always means completed orders.
 - Follow-up questions ("What about August?") are rewritten into a standalone question using the conversation; the UI shows how the question was interpreted.
@@ -75,7 +76,7 @@ The full list of what the project offers today. Keep it current as features land
 - Append-only audit trail of sign-ins, failed and locked sign-ins, questions (text, SQL, row count), rejected queries and access denials. Passwords, tokens, results and answers are never recorded.
 - One-line JSON logs with request ID, user, path, status and time; `X-Request-ID` is accepted and returned on every response.
 - `GET /health` (liveness) and `GET /ready` (both databases reachable).
-- No runaway loops: every question stops within 15 workflow steps (`max_steps` in the policy file; the longest normal path takes 11), on top of the one-repair and one-second-opinion counters. A stopped run returns 422 with a plain message and is audited as `step_limit`.
+- No runaway loops: every question stops within 15 workflow steps (`max_steps` in the policy file; the longest normal path takes 13), on top of the one-repair and one-second-opinion counters. A stopped run returns 422 with a plain message and is audited as `step_limit`.
 - Timeouts, an output-token cap and a total token budget for model calls; model and database failures return clear, generic errors.
 - The whole stack starts with one `docker compose up`.
 
@@ -172,7 +173,7 @@ All routes except the first four need `Authorization: Bearer <token>` from `/aut
 | GET | `/hello` | Smoke test |
 | GET | `/ready` | Readiness: 200 when both databases answer, 503 otherwise |
 | POST | `/auth/login` | `{"username", "password"}` → access token and role |
-| POST | `/ask` | `{"message", "conversation_id"?}` → answer, SQL, rows, chart, sources (knowledge documents used), conversation ID |
+| POST | `/ask` | `{"message", "conversation_id"?}` → answer, SQL, rows, chart, sources (knowledge documents used), route, trace (agent steps), conversation ID |
 | POST | `/ask/sql` | Generate and validate SQL for a question without running it (422 if the validator rejects it) |
 | GET | `/conversations/{id}` | Turns of one of your own conversations |
 | GET | `/schema` | Tables and columns your role can see |
