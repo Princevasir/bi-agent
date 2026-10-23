@@ -75,6 +75,7 @@ The full list of what the project offers today. Keep it current as features land
 - Append-only audit trail of sign-ins, failed and locked sign-ins, questions (text, SQL, row count), rejected queries and access denials. Passwords, tokens, results and answers are never recorded.
 - One-line JSON logs with request ID, user, path, status and time; `X-Request-ID` is accepted and returned on every response.
 - `GET /health` (liveness) and `GET /ready` (both databases reachable).
+- No runaway loops: every question stops within 15 workflow steps (`max_steps` in the policy file; the longest normal path takes 11), on top of the one-repair and one-second-opinion counters. A stopped run returns 422 with a plain message and is audited as `step_limit`.
 - Timeouts, an output-token cap and a total token budget for model calls; model and database failures return clear, generic errors.
 - The whole stack starts with one `docker compose up`.
 
@@ -208,6 +209,7 @@ Set in `.env`; defaults come from `docker-compose.yml`.
 | `SQL_TIMEOUT_MS` | 5000 | Statement timeout per query |
 | `SQL_MAX_TABLES` | 8 | Table references allowed in one query |
 | `SQL_MAX_DEPTH` | 3 | How deeply subqueries may be nested |
+| `WORKFLOW_MAX_STEPS` | 15 | Steps one question may take through the workflow; a run that reaches it is stopped with a 422 |
 | `LOG_LEVEL` | `INFO` | Backend log level |
 | `LOG_FORMAT` | `json` | `json` (one JSON object per line) or `text` for easier local reading |
 

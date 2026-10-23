@@ -1,6 +1,7 @@
 from datetime import date
 from typing import TypedDict
 
+from langgraph.errors import GraphRecursionError
 from langgraph.graph import END, START, StateGraph
 
 from app.access import denied_columns, metric_rules, tables_for
@@ -15,6 +16,10 @@ from app import limits
 from app.db import DBQueryError, run_readonly
 
 MAX_QUESTION_CHARS = 500
+
+
+class StepLimitError(Exception):
+    """The workflow reached max_steps without finishing; it is stopped rather than left to loop."""
 NO_QUERY_ANSWER = ("I can only answer questions about the data you have access to, "
                    "and I can't change data. "
                    'Try something like "What was revenue by region in September 2026?"')
@@ -170,7 +175,11 @@ def build_graph(generate, knowledge=None):
 def answer_question(question, generate, today, history=None, role="analyst", knowledge=None):
     """knowledge(question, role) returns retrieved documents for the SQL prompt (RAG R6), or None for none."""
     state = {"question": question, "today": today, "history": history or [], "role": role}
-    out = build_graph(generate, knowledge).invoke(state)
+    max_steps = limits.workflow_max_steps()
+    try:
+        out = build_graph(generate, knowledge).invoke(state, config={"recursion_limit": max_steps})
+    except GraphRecursionError as e:
+        raise StepLimitError(f"The workflow did not finish within {max_steps} steps.") from e
     requested = requested_chart(question) if out["rows"] else None     # nothing to draw, nothing to explain
     chart, chart_note = apply_request(build_chart_spec(out["columns"], out["rows"]), requested)
     return {

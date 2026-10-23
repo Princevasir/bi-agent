@@ -27,6 +27,7 @@ services:
       SQL_TIMEOUT_MS: ${SQL_TIMEOUT_MS:-5000}
       SQL_MAX_TABLES: ${SQL_MAX_TABLES:-8}
       SQL_MAX_DEPTH: ${SQL_MAX_DEPTH:-3}
+      WORKFLOW_MAX_STEPS: ${WORKFLOW_MAX_STEPS:-15}
       DATABASE_URL: postgresql://bi_readonly:readonly_dev_pw@db:5432/analytics
       APP_DATABASE_URL: postgresql://app_rw:app_dev_pw@db:5432/appdb
       JWT_SECRET: ${JWT_SECRET:-}

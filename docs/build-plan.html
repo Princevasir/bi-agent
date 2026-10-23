@@ -73,7 +73,7 @@ th{background:var(--surface)}
 <main>
 <h1>BI Agent MVP: build it in verified steps</h1>
 <p class="lede">27 small milestones, from a Hello World API to a deployed natural-language BI agent. Each one is run, tested, committed, and approved before the next begins.</p>
-<p class="key">Last updated 23 October 2026 (M28 complete; guardrails GR-SQL-01, -06, -04, -02, GR-POL-01 and -02 implemented; local model through Ollama; frontend F1 and F1b done; M29 started; M25 to M27 paused). This file is the living plan: it is updated whenever the plan or project status changes, and git keeps its history.</p>
+<p class="key">Last updated 24 October 2026 (demo gaps D1 to D10 planned from the capstone brief, D1 step limit done; RAG R1 to R6a done; M28 complete; guardrails GR-SQL-01, -06, -04, -02, GR-POL-01 and -02 implemented; local model through Ollama; frontend F1 and F1b done; M29 started; M25 to M27 paused). This file is the living plan: it is updated whenever the plan or project status changes, and git keeps its history.</p>
 
 <h2>The loop every milestone follows</h2>
 <ol class="loop">
@@ -3314,6 +3314,21 @@ backend/.venv/bin/python -m pytest image_tests</code></pre>
 <p class="key">Known limits of F: Saved insights last only for the browser session; Streamlit reruns the script on every click, so very large results would feel slow (results are capped at 200 rows); the browser check is manual.</p>
 
 <p class="key">Groq added 24 October 2026 (<code>LLM_PROVIDER=groq</code>, default <code>qwen/qwen3.8-27b</code>): 6 tests failed first; three-round sample evaluation 22/23 with no safety failures, 0 to 1 second per call; the one failure, "Which region had the highest revenue in September 2026?", returned the right region without its revenue, which the case requires; three attempts were Groq provider errors and correctly reported as not scored. Free tier: about 8,000 tokens a minute, so the runner now waits out rate limits. OpenRouter still has no account credit.</p>
+<h2>Demo gaps (planned 24 October 2026)</h2>
+<p>The capstone brief and marking scheme were checked against the project; the presentation is <a href="demo.html">demo.html</a>. Gaps, in the agreed order, one at a time with tests first:</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>Gap</th><th>Why (brief or marking)</th><th>Status</th></tr></thead><tbody>
+<tr><td>D1</td><td>Explicit step limit on the workflow</td><td>Error handling 20%: "no infinite loops", "max_turns on day one"</td><td><b>Done (seen):</b> <code>max_steps = 15</code> in the policy (environment may only lower it), passed to LangGraph as the recursion limit; a stopped run returns 422 and is audited as <code>step_limit</code>. The red run showed why it matters: this LangGraph version did not stop on its own, and a broken repair counter made 1,001 model calls. 6 of 7 new tests failed first; the policy test that pins the earlier limits was extended for the new key. Backend 890, frontend 72.</td></tr>
+<tr><td>D2</td><td>Named specialist agents and a coordinator inside the graph</td><td>Mandatory: 2+ specialist agents, clear coordinator, one job each; agent functionality 25%</td><td></td></tr>
+<tr><td>D3</td><td>Sources and a "How I answered" panel in the UI</td><td>RAG: no source citation is a named mistake; makes the agents visible</td><td></td></tr>
+<tr><td>D4</td><td>Setup in three commands (one demo setup script)</td><td>Code quality 10%: "run it in 3 commands"</td><td></td></tr>
+<tr><td>D5</td><td>A token budget that cannot end the demo</td><td>The 50,000-token process budget runs out after a few retail questions (429)</td><td></td></tr>
+<tr><td>D6</td><td>Fast demo provider (Groq), Ollama as fallback</td><td>20 to 40 seconds per answer on the local 7B model</td><td></td></tr>
+<tr><td>D7</td><td>Knowledge-only answers with citations (RAG R6b)</td><td>RAG integration 20%: retrieval adds real value</td><td></td></tr>
+<tr><td>D8</td><td>Automated dry run of the demo scenarios on retail data (RAG R7)</td><td>Working demo with 5+ scenarios; "dry run the night before"</td><td></td></tr>
+<tr><td>D9</td><td>One retry with backoff and a circuit breaker for the models</td><td>Failure handling: retries, fallbacks, circuit breakers</td><td></td></tr>
+<tr><td>D10</td><td>Optional: MCP server with two tools</td><td>Optional in the brief (RAG already chosen)</td><td></td></tr>
+</tbody></table></div>
+
 <h2>RAG track (approved 24 October 2026)</h2>
 <p>Knowledge retrieval for business questions is planned and tracked in <a href="rag.html">rag.html</a>: a Trailhead Outfitters knowledge pack, pgvector in Postgres, local Ollama embeddings, and milestones R1 to R8 (R7 absorbs M29d). It replaces the earlier M30 and M31 sketches for schema retrieval; memory (M31) builds on it later. Status (seen): R1 to R5 done, the latest being retrieval with Recall@5 0.947 and MRR 0.939 on 38 labelled questions; R6a (knowledge in the SQL prompt, sources returned and audited) is done: on the 7B model, average order value and revenue by region are now right (seen). R6b is next.</p>
 

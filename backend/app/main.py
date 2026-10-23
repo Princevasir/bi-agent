@@ -18,7 +18,7 @@ from app.appdb import ping as appdb_ping
 from app.auth import AuthConfigError, authenticate, create_token, current_user
 from app.bi.conversation import MAX_STORED_ROWS, ConversationStore, Turn
 from app.bi.schema import catalog_for, get_schema, metrics_for
-from app.bi.service import answer_question
+from app.bi.service import StepLimitError, answer_question
 from app.bi.chart import NAMES as CHART_NAMES, apply_request, build_chart_spec, is_chart_only, requested_chart
 from app.bi.sql_guard import SQLRejected, validate_sql
 from app.bi.text_to_sql import generate_sql, is_no_query
@@ -131,6 +131,14 @@ async def sql_rejected_handler(request: Request, exc: SQLRejected):
     audit_event(request, "sql_rejected", 422, reason=str(exc))
     return JSONResponse(status_code=422,
                         content={"detail": exc.user_message or "The generated query was rejected."})
+
+
+@app.exception_handler(StepLimitError)
+async def step_limit_handler(request: Request, exc: StepLimitError):
+    logger.warning("workflow step limit reached", extra={"request_id": _rid(request), "detail": str(exc)})
+    audit_event(request, "step_limit", 422, reason=str(exc))
+    return JSONResponse(status_code=422,
+                        content={"detail": "I could not answer that within the step limit. Try asking more simply."})
 
 
 @app.exception_handler(AuthConfigError)

@@ -51,6 +51,11 @@ def sql_max_depth():
     return _limit("SQL_MAX_DEPTH", "max_depth")
 
 
+def workflow_max_steps():
+    """Steps one question may take through the workflow, whatever the other counters say (demo gap D1)."""
+    return _limit("WORKFLOW_MAX_STEPS", "max_steps")
+
+
 def decline_retries():
     """Second opinions when the model declines a question that clearly mentions the data."""
     return _limit("DECLINE_RETRIES", "decline_retries", minimum=0)
