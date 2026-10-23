@@ -4,7 +4,7 @@ from typing import TypedDict
 from langgraph.graph import END, START, StateGraph
 
 from app.access import tables_for
-from app.bi.chart import build_chart_spec
+from app.bi.chart import apply_request, build_chart_spec, requested_chart
 from app.bi.grounding import answer_prompt, fallback_answer, is_grounded
 from app.bi.rewrite import rewrite_prompt
 from app.bi.sql_guard import validate_sql
@@ -120,6 +120,7 @@ def build_graph(generate):
 def answer_question(question, generate, today, history=None, role="analyst"):
     state = {"question": question, "today": today, "history": history or [], "role": role}
     out = build_graph(generate).invoke(state)
+    chart, chart_note = apply_request(build_chart_spec(out["columns"], out["rows"]), requested_chart(question))
     return {
         "question": question,
         "interpreted_as": out.get("standalone", question),
@@ -129,5 +130,6 @@ def answer_question(question, generate, today, history=None, role="analyst"):
         "truncated": out["truncated"],
         "answer": out["answer"],
         "answer_source": out["answer_source"],
-        "chart": build_chart_spec(out["columns"], out["rows"]),
+        "chart": chart,
+        "chart_note": chart_note,
     }

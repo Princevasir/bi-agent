@@ -101,3 +101,80 @@ def build_chart_spec(columns, rows):
     if first in ("text", "country") and len(rest) >= 3 and all(k == "number" for k in rest) and n <= MAX_RADAR_ROWS:
         return _spec(["grouped_bar", "radar"], x=columns[0], values=numbers)
     return None
+
+
+
+# ---- F1c: chart types named by the user ---------------------------------------------------------
+# A fixed word list, never the model. Order matters: "stacked area" is an area chart, "stacked bar" a
+# stacked bar, "bubble" before "scatter". Whole words only, so "online" is not "line".
+REQUESTS = [
+    ("donut", r"\b(donut|doughnut)\b"), ("pie", r"\bpie\b"), ("treemap", r"\btree ?map\b"),
+    ("funnel", r"\bfunnel\b"), ("waterfall", r"\bwaterfall\b"), ("heatmap", r"\bheat ?map\b"),
+    ("sankey", r"\bsankey\b"), ("radar", r"\b(radar|spider)\b"), ("bubble", r"\bbubble\b"),
+    ("scatter", r"\bscatter\b"), ("histogram", r"\bhistogram\b"),
+    ("box", r"\bbox ?plot\b|\bbox and whisker\b"), ("gantt", r"\bgantt\b|\btimeline chart\b"),
+    ("map", r"\bchoropleth\b|\bon a map\b|\bas a map\b|\bmap chart\b|\bworld map\b"),
+    ("area", r"\barea (chart|graph|plot)\b|\bas an area\b"), ("stacked_bar", r"\bstacked\b"),
+    ("grouped_bar", r"\b(grouped|clustered|side[- ]by[- ]side)\b"),
+    ("line", r"\bline (chart|graph|plot)\b|\bas a line\b|\bas lines\b"),
+    ("bar", r"\b(bar|column) (chart|graph|plot)s?\b|\bas (a )?bars?\b|\bas columns\b"),
+]
+NAMES = {
+    "bar": "bar chart", "pie": "pie chart", "donut": "donut chart", "treemap": "treemap", "funnel": "funnel chart",
+    "waterfall": "waterfall chart", "line": "line chart", "area": "area chart", "stacked_bar": "stacked bar chart",
+    "grouped_bar": "grouped bar chart", "heatmap": "heatmap", "sankey": "Sankey diagram", "radar": "radar chart",
+    "scatter": "scatter plot", "bubble": "bubble chart", "histogram": "histogram", "box": "box plot",
+    "map": "map", "gantt": "Gantt chart",
+}
+NEEDS = {
+    "bar": "one category and one number", "pie": "one category and one number, 2 to 8 parts, no negative values",
+    "donut": "one category and one number, 2 to 8 parts, no negative values",
+    "treemap": "categories with positive numbers", "funnel": "stages whose values only fall, such as visits, carts and orders",
+    "waterfall": "step-by-step changes, including negative ones", "line": "dates, months or years along the bottom",
+    "area": "dates, months or years along the bottom", "stacked_bar": "two categories and one number",
+    "grouped_bar": "a category and two or more numbers, or two categories and one number",
+    "heatmap": "two categories and one number", "sankey": "two categories and one number (from, to and amount)",
+    "radar": "one category and at least three numbers", "scatter": "two numbers per row",
+    "bubble": "three numbers per row", "histogram": "one number with at least 10 rows",
+    "box": "one number with at least 10 rows", "map": "a country column and one number",
+    "gantt": "a label with a start and an end date",
+}
+CHART_WORDS = {
+    "pie", "donut", "doughnut", "treemap", "tree", "map", "funnel", "waterfall", "heatmap", "heat", "sankey",
+    "radar", "spider", "bubble", "scatter", "histogram", "box", "boxplot", "whisker", "gantt", "timeline",
+    "choropleth", "world", "area", "stacked", "grouped", "clustered", "side", "line", "lines", "bar", "bars",
+    "column", "columns", "chart", "charts", "graph", "plot", "diagram",
+}
+FILLER = {
+    "make", "it", "that", "this", "the", "show", "draw", "display", "turn", "change", "switch", "convert",
+    "into", "to", "as", "in", "a", "an", "please", "instead", "can", "could", "you", "me", "use", "now",
+    "same", "result", "results", "view", "visualise", "visualize", "with", "of", "type", "by", "and", "on",
+    "try", "lets", "let's", "how", "about", "would", "like", "want", "i", "give",
+}
+
+
+def requested_chart(text):
+    """The chart type the user named, or None."""
+    lowered = str(text).lower()
+    return next((kind for kind, pattern in REQUESTS if re.search(pattern, lowered)), None)
+
+
+def is_chart_only(text):
+    """True when the message asks only for a different chart, not for different data."""
+    if requested_chart(text) is None:
+        return False
+    words = re.findall(r"[a-z']+", str(text).lower())
+    return all(w in CHART_WORDS or w in FILLER for w in words)
+
+
+def apply_request(spec, requested):
+    """Use the requested chart if it fits the result; otherwise keep the suggestion and say why."""
+    if requested is None:
+        return spec, None
+    if spec and requested in spec["options"]:
+        options = [requested] + [o for o in spec["options"] if o != requested]
+        return {**spec, "type": requested, "options": options}, None
+    note = f"A {NAMES[requested]} doesn't fit this result: it needs {NEEDS[requested]}."
+    if spec:
+        note += f" Showing a {NAMES[spec['type']]} instead; other options are under Chart type."
+    return spec, note

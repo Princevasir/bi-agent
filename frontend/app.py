@@ -97,6 +97,8 @@ def show_answer(msg, index):
     st.markdown(f"##### {plain(msg['answer'])}")
     if msg.get("interpreted_as") and msg["interpreted_as"] != msg.get("question"):
         st.caption(f"Interpreted as: {plain(msg['interpreted_as'])}")
+    if msg.get("chart_note"):
+        st.info(msg["chart_note"], icon="ℹ️")
     card = single_value(msg["columns"], msg["rows"])
     if card:
         st.metric(card[0], card[1], border=True)

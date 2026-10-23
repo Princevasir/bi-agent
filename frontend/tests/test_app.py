@@ -236,3 +236,23 @@ def test_no_selector_when_only_one_chart_fits(backend):
     at = signed_in_app()
     at.chat_input[0].set_value("Price against quantity").run()
     assert len(at.selectbox) == 0 and len(at.get("plotly_chart")) == 1
+
+
+# ---- F1c: requested chart types --------------------------------------------------------------------
+
+def test_requested_chart_is_shown_first(backend):
+    backend.result = {**REGIONS, "chart": {**REGIONS["chart"], "type": "pie",
+                                           "options": ["pie", "bar", "donut", "treemap"]}}
+    at = signed_in_app()
+    at.chat_input[0].set_value("Revenue by region as a pie chart").run()
+    assert at.selectbox[0].value == "pie" and '"type":"pie"' in chart_json(at)
+
+
+def test_a_request_that_does_not_fit_shows_why(backend):
+    note = "A pie chart doesn't fit this result: it needs one category and one number. Showing a line chart instead."
+    backend.result = {**REGIONS, "columns": ["month", "revenue"], "rows": [["2026-08", 570.0], ["2026-09", 810.0]],
+                      "chart": {"type": "line", "options": ["line", "area", "bar"], "x": "month", "y": "revenue"},
+                      "chart_note": note}
+    at = signed_in_app()
+    at.chat_input[0].set_value("Revenue by month as a pie chart").run()
+    assert any(note in str(i.value) for i in at.info)
