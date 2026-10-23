@@ -55,12 +55,38 @@ prompt_functions = [
   "left", "right", "strpos", "split_part",
 ]
 
-# Which tables each role may query, and which environment variable holds its read-only
-# database login. The database grants are the real enforcement; these must match them.
-[roles.analyst]
+# Data sources (M29b). DATA_SOURCE picks one (default: sample); an unknown name stops the backend.
+# For each role: the tables it may query, the environment variable holding its read-only database
+# login, and whether it may read columns the catalog flags as personal data. The database grants
+# are the real enforcement; these must match them. "catalog = true" builds the prompt and the
+# column rules from backend/catalog.
+[sources.sample]
+catalog = false
+
+[sources.sample.roles.analyst]
 tables = ["orders", "regions"]
 database_url_env = "DATABASE_URL"
 
-[roles.limited]
+[sources.sample.roles.limited]
 tables = ["regions"]
 database_url_env = "DATABASE_URL_LIMITED"
+
+[sources.retail]
+catalog = true
+
+[sources.retail.roles.analyst]
+tables = [
+  "regions", "countries", "stores", "warehouses",
+  "categories", "brands", "suppliers", "products", "product_prices", "product_suppliers",
+  "loyalty_tiers", "customers", "customer_addresses", "loyalty_memberships",
+  "promotions", "orders", "order_items", "order_promotions", "payments", "shipments", "returns",
+  "inventory_snapshots", "purchase_orders", "purchase_order_items",
+  "campaigns", "web_sessions", "support_tickets", "departments", "employees",
+]
+database_url_env = "RETAIL_DATABASE_URL"
+personal_data = false
+
+[sources.retail.roles.limited]
+tables = ["regions", "countries", "stores", "warehouses", "categories", "brands", "products", "product_prices"]
+database_url_env = "RETAIL_DATABASE_URL_LIMITED"
+personal_data = false

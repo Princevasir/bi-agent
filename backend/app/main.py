@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app import audit
-from app.access import AccessError, tables_for
+from app.access import AccessError, denied_columns, tables_for
 from app.appdb import User, get_user
 from app.appdb import ping as appdb_ping
 from app.auth import AuthConfigError, authenticate, create_token, current_user
@@ -21,7 +21,8 @@ from app.bi.service import answer_question
 from app.bi.chart import NAMES as CHART_NAMES, apply_request, build_chart_spec, is_chart_only, requested_chart
 from app.bi.sql_guard import SQLRejected, validate_sql
 from app.bi.text_to_sql import generate_sql, is_no_query
-from app.db import DBError, DBTimeoutError, ResultTooLargeError, TrustedSQL, run_readonly
+from app.db import (DBAccessError, DBError, DBQueryError, DBTimeoutError, ResultTooLargeError, TrustedSQL,
+                    run_readonly)
 from app.llm import get_llm
 from app.llm.base import (
     LLMConfigError, LLMError, LLMRateLimitError, LLMService, LLMTimeoutError,
@@ -110,6 +111,10 @@ async def result_too_large_handler(request: Request, exc: ResultTooLargeError):
 async def db_error_handler(request: Request, exc: DBError):
     if isinstance(exc, DBTimeoutError):
         status, message = 504, "The database query timed out."
+    elif isinstance(exc, DBQueryError):
+        status, message = 422, "The generated query could not run. Try rephrasing the question."
+    elif isinstance(exc, DBAccessError):
+        status, message = 403, "You don't have access to that data."
     else:
         status, message = 503, "The database is unavailable."
     logger.warning("request_id=%s db_error=%s detail=%s cause=%r",
@@ -244,7 +249,7 @@ def ask_sql(body: ChatRequest, request: Request,
             user: User = Depends(signed_in),
             llm: LLMService = Depends(get_llm)):
     sql = generate_sql(body.message, make_generate(llm, request), date.today(), role=user.role)
-    sql = "" if is_no_query(sql) else validate_sql(sql, tables_for(user.role))
+    sql = "" if is_no_query(sql) else validate_sql(sql, tables_for(user.role), denied_columns(user.role))
     audit_event(request, "ask_sql", 200, question=body.message, sql=sql)
     return {"question": body.message, "sql": sql}
 

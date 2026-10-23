@@ -10,6 +10,9 @@ os.environ.setdefault(
     "postgresql://bi_readonly:readonly_dev_pw@localhost:5433/analytics",
 )
 os.environ.setdefault("DATABASE_URL_LIMITED", "postgresql://bi_limited:limited_dev_pw@localhost:5433/analytics")
+os.environ.setdefault("RETAIL_DATABASE_URL", "postgresql://retail_analyst:retail_analyst_dev_pw@localhost:5433/retail_test")
+os.environ.setdefault("RETAIL_DATABASE_URL_LIMITED", "postgresql://retail_limited:retail_limited_dev_pw@localhost:5433/retail_test")
+os.environ.pop("DATA_SOURCE", None)   # tests choose the data source themselves
 
 from app.appdb import User  # noqa: E402
 from app.auth import current_user  # noqa: E402

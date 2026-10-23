@@ -28,6 +28,13 @@ class PolicyError(Exception):
 class Role:
     tables: tuple
     database_url_env: str
+    personal_data: bool = False
+
+
+@dataclass(frozen=True)
+class Source:
+    catalog: bool
+    roles: dict
 
 
 @dataclass(frozen=True)
@@ -39,7 +46,19 @@ class Policy:
     allowed_function_names: frozenset
     blocked_prefixes: tuple
     prompt_functions: tuple
-    roles: dict
+    sources: dict
+
+    @property
+    def roles(self):
+        """Roles of the active data source (DATA_SOURCE, default sample)."""
+        return self.sources[active_source(self)].roles
+
+
+def active_source(p):
+    name = os.getenv("DATA_SOURCE", "sample")
+    if name not in p.sources:
+        raise PolicyError(f"DATA_SOURCE must be one of {', '.join(sorted(p.sources))}, got {name!r}.")
+    return name
 
 
 def _keys(section, where, required, optional=()):
@@ -69,7 +88,7 @@ def load(path=None):
     except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as e:
         raise PolicyError(f"The policy file {path} could not be read: {e}") from e
 
-    _keys(doc, "the policy", ("version", "sql", "roles"))
+    _keys(doc, "the policy", ("version", "sql", "sources"))
     if doc["version"] != 1:
         raise PolicyError("Unsupported policy version.")
 
@@ -97,29 +116,41 @@ def load(path=None):
         if not TABLE_NAME.match(n) or n.startswith(prefixes):
             raise PolicyError(f"[sql.functions] prompt_functions: {n} must be a lower-case SQL name, not blocked.")
 
-    roles = doc["roles"]
-    if not isinstance(roles, dict) or not roles:
-        raise PolicyError("[roles] must define at least one role.")
+    sources = doc["sources"]
+    if not isinstance(sources, dict) or "sample" not in sources:
+        raise PolicyError("[sources] must define at least the sample source.")
     parsed = {}
-    for name, role in roles.items():
-        where = f"[roles.{name}]"
-        _keys(role, where, ("tables", "database_url_env"))
-        tables = _strings(role["tables"], f"{where} tables") if role["tables"] else None
-        if not tables:
-            raise PolicyError(f"{where} tables must list at least one table.")
-        for t in tables:
-            if not TABLE_NAME.match(t):
-                raise PolicyError(f"{where} tables: {t} is not a valid table name.")
-        env = role["database_url_env"]
-        if not isinstance(env, str) or not ENV_NAME.match(env):
-            raise PolicyError(f"{where} database_url_env must be an environment variable name.")
-        parsed[name] = Role(tables=tuple(tables), database_url_env=env)
+    for source_name, source in sources.items():
+        _keys(source, f"[sources.{source_name}]", ("catalog", "roles"))
+        if not isinstance(source["catalog"], bool):
+            raise PolicyError(f"[sources.{source_name}] catalog must be true or false.")
+        roles = source["roles"]
+        if not isinstance(roles, dict) or not roles:
+            raise PolicyError(f"[sources.{source_name}.roles] must define at least one role.")
+        parsed_roles = {}
+        for name, role in roles.items():
+            where = f"[sources.{source_name}.roles.{name}]"
+            _keys(role, where, ("tables", "database_url_env"), ("personal_data",))
+            tables = _strings(role["tables"], f"{where} tables") if role["tables"] else None
+            if not tables:
+                raise PolicyError(f"{where} tables must list at least one table.")
+            for t in tables:
+                if not TABLE_NAME.match(t):
+                    raise PolicyError(f"{where} tables: {t} is not a valid table name.")
+            env = role["database_url_env"]
+            if not isinstance(env, str) or not ENV_NAME.match(env):
+                raise PolicyError(f"{where} database_url_env must be an environment variable name.")
+            personal = role.get("personal_data", False)
+            if not isinstance(personal, bool):
+                raise PolicyError(f"{where} personal_data must be true or false.")
+            parsed_roles[name] = Role(tables=tuple(tables), database_url_env=env, personal_data=personal)
+        parsed[source_name] = Source(catalog=source["catalog"], roles=parsed_roles)
 
     return Policy(
         path=path, sha256=hashlib.sha256(raw).hexdigest(),
         sql={k: sql[k] for k in SQL_LIMITS},
         allowed_function_types=frozenset(types), allowed_function_names=frozenset(names),
-        blocked_prefixes=prefixes, prompt_functions=tuple(shown), roles=parsed,
+        blocked_prefixes=prefixes, prompt_functions=tuple(shown), sources=parsed,
     )
 
 

@@ -18,6 +18,8 @@ WRITE_NODES = tuple(getattr(exp, n) for n in (
 ) if hasattr(exp, n))
 SET_OPERATIONS = (exp.Union, exp.Intersect, exp.Except)
 COMPARISONS = (exp.EQ, exp.NEQ, exp.GT, exp.GTE, exp.LT, exp.LTE)
+PERSONAL_DATA_MESSAGE = ("You don't have access to personal data such as names, email addresses, phone numbers, "
+                         "street addresses or salaries.")
 TOO_BROAD_MESSAGE = ("The generated query was too broad to run safely. "
                      "Try a more specific question, for example a shorter period or one grouping.")
 
@@ -105,7 +107,24 @@ def _select_ancestors(node):
         parent = parent.parent
 
 
-def validate_sql(sql: str, allowed_tables = ALLOWED_TABLES) -> ValidatedSQL:
+def _check_columns(tree, ctes, denied):
+    """GR-SQL-05: no column the role may not read, by name or through *, in any part of the query."""
+    tables = {t.name.lower() for t in tree.find_all(exp.Table) if not (t.name in ctes and not t.db)}
+    restricted = {c for t, c in denied if t in tables}
+    if not restricted:
+        return
+    for col in tree.find_all(exp.Column):
+        if col.name.lower() in restricted:
+            raise SQLRejected(f"Personal data column: {col.name}", PERSONAL_DATA_MESSAGE)
+    star_tables = {t for t, _ in denied if t in tables}
+    for select in tree.find_all(exp.Select):
+        for e in select.expressions:
+            if isinstance(e, exp.Star) or (isinstance(e, exp.Column) and isinstance(e.this, exp.Star)):
+                raise SQLRejected(f"SELECT * over tables with personal data: {', '.join(sorted(star_tables))}",
+                                  PERSONAL_DATA_MESSAGE)
+
+
+def validate_sql(sql: str, allowed_tables = ALLOWED_TABLES, denied_columns=frozenset()) -> ValidatedSQL:
     try:
         statements = [s for s in sqlglot.parse(sql, read="postgres") if s is not None]
     except SqlglotError as e:
@@ -131,4 +150,5 @@ def validate_sql(sql: str, allowed_tables = ALLOWED_TABLES) -> ValidatedSQL:
             raise SQLRejected(f"Table not permitted: {t.name}")
     _check_functions(tree)
     _check_structure(tree)
+    _check_columns(tree, ctes, denied_columns)
     return ValidatedSQL(tree.sql(dialect="postgres"))

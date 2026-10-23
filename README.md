@@ -50,7 +50,9 @@ The full list of what the project offers today. Keep it current as features land
 - Every generated query passes a validator before it runs: exactly one `SELECT` (or a `UNION`, `INTERSECT` or `EXCEPT` of them), no write hidden anywhere in it, allowed tables only, no schema-qualified names, only functions from an approved list (so nothing that runs SQL from a string, reads server settings, or builds huge values), no `SELECT INTO` or locking, no joins without a join condition, at most 8 tables and 3 levels of nested subqueries. Queries that are too broad get a message suggesting a more specific question.
 - Queries run through a read-only database login with a 5-second timeout and a 200-row cap. Rows are read in small batches, so a query matching millions of rows never loads them into the backend.
 - Two roles: `analyst` (orders and regions) and `limited` (regions only), each with its own database login, so the database refuses what the role may not read even if the validator were bypassed.
-- The model only sees the tables the user's role may see.
+- The model only sees the tables the user's role may see, described from the data catalog (meaning, grain, allowed values, joins, known traps) when the retail data is connected.
+- Personal data (names, email, phone, street address, postal code, salary) is refused before the database is reached, including through `SELECT *`, with a clear message.
+- A query that fails because it is wrong gets "could not run, try rephrasing" rather than "database unavailable".
 - There is one way into the database for questions: the code refuses to run any SQL that did not come out of the validator, and a test fails if a new route skips sign-in.
 - Conversations are private: another user's conversation ID returns "not found".
 
@@ -128,7 +130,7 @@ cd backend
 .venv/bin/python -m retail.load --scale full     # or --scale small for a quick 1% version
 ```
 
-The app still answers from the 12-row sample database for now; pointing it at the retail data comes with the data catalog (M29).
+Then set `DATA_SOURCE=retail` in `.env` and recreate the backend (`docker compose up -d backend`). Analysts can query all 29 tables except personal-data columns; limited users see geography and products only. With the local model, raise Ollama's context length to 16,384 (Ollama settings, or `launchctl setenv OLLAMA_CONTEXT_LENGTH 16384` and restart Ollama), because the retail prompt is about 4,700 tokens.
 
 ## Roles
 
@@ -187,6 +189,7 @@ Set in `.env`; defaults come from `docker-compose.yml`.
 | `LLM_TIMEOUT_SECONDS` | 20 | Per LLM call |
 | `LLM_MAX_OUTPUT_TOKENS` | 512 | Per LLM call |
 | `LLM_TOKEN_BUDGET` | 50000 | Total tokens per backend process before LLM calls are refused |
+| `DATA_SOURCE` | `sample` | `retail` answers from the 29-table retail demo database (fill it first with `python -m retail.load --scale full`); `sample` uses the 12-row database the tests use |
 | `GUARDRAIL_POLICY` | `backend/policy/guardrails.toml` | Path to the guardrail policy file |
 | `SQL_MAX_ROWS` | 200 | Rows returned per query; more are never read from the database |
 | `SQL_MAX_RESULT_BYTES` | 1000000 | Approximate size of the rows returned per query; a single larger row is refused |

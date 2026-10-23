@@ -19,6 +19,14 @@ class DBTimeoutError(DBError):
     """Query exceeded the time limit."""
 
 
+class DBQueryError(DBError):
+    """The query itself is wrong (unknown or ambiguous column, syntax, bad value)."""
+
+
+class DBAccessError(DBError):
+    """The login may not read something the query asked for."""
+
+
 class ResultTooLargeError(DBError):
     """A single result row is over the byte limit."""
 
@@ -79,6 +87,11 @@ def run_readonly(sql, params=None, max_rows=None, timeout_ms=None, role="analyst
                         size += row_size
     except errors.QueryCanceled as e:
         raise DBTimeoutError("Query timed out.") from e
+    except errors.InsufficientPrivilege as e:
+        raise DBAccessError("Permission denied.") from e
     except psycopg.Error as e:
+        # SQLSTATE class 42 (syntax or access rule) and 22 (bad data): the query is wrong, not the database.
+        if (getattr(e, "sqlstate", None) or "")[:2] in ("42", "22"):
+            raise DBQueryError("The query failed.") from e
         raise DBError("Database error.") from e
     return {"columns": columns, "rows": rows, "truncated": truncated}

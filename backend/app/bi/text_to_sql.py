@@ -2,13 +2,14 @@ import re
 from datetime import date
 
 from app import policy
+from app.access import denied_columns
 from app.bi.schema import metrics_text, schema_text
 
 FENCE = re.compile(r"```(?:sql)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
 NO_QUERY = "NO_QUERY"
 
 
-def rules_text() -> str:
+def rules_text(role: str = "analyst") -> str:
     """The SQL rules the validator enforces, worded for the model (GR-POL-02)."""
     p = policy.get()
     return (
@@ -23,6 +24,9 @@ def rules_text() -> str:
         "- Do not use schema-qualified names or functions in FROM (such as generate_series or unnest).\n"
         f"- Use only these functions (CASE expressions and CAST or :: casts are also fine): "
         f"{', '.join(p.prompt_functions)}."
+        + ("\n- Personal data (names, email addresses, phone numbers, street addresses, postal codes, "
+           "salaries) is not available: never select it, and never use SELECT * on customers, "
+           "customer_addresses or employees." if denied_columns(role) else "")
     )
 
 
@@ -37,7 +41,7 @@ def build_prompt(question: str, today: date, role: str = "analyst") -> str:
         f"small talk) or asks to change or delete data, return exactly {NO_QUERY} instead.\n\n"
         f"Today's date: {today.isoformat()}\n\n"
         f"Schema:\n{schema_text(role)}\n\nMetrics:\n{metrics_text(role)}\n\n"
-        f"{rules_text()}\n\n"
+        f"{rules_text(role)}\n\n"
         f"Question: {question}\nSQL:"
     )
 

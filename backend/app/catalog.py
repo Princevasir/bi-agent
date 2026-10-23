@@ -6,6 +6,7 @@ typed by hand: introspect() reads them from the database, and drift() reports an
 """
 import tomllib
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 
 DEFAULT_DIR = Path(__file__).resolve().parents[1] / "catalog"
@@ -191,3 +192,9 @@ def drift(cat, db):
         problems += [f"column {name}.{c} is in the database but not described" for c in sorted(actual - described)]
         problems += [f"column {name}.{c} is described but not in the database" for c in sorted(described - actual)]
     return problems
+
+
+@lru_cache(maxsize=1)
+def get():
+    """The catalog in backend/catalog, loaded once."""
+    return load()

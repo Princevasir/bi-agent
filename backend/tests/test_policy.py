@@ -92,7 +92,7 @@ def test_dangerous_function_names_are_not_allowed(name):
 
 BROKEN = {
     "not toml": ("[sql\nmax_rows = 1", "could not be read"),
-    "missing section": (VALID.replace("[roles.limited]", "[roles_limited_typo]"), "roles_limited_typo"),
+    "missing section": (VALID.replace("[sources.sample.roles.limited]", "[roles_limited_typo]"), "roles_limited_typo"),
     "unknown key": (VALID.replace("max_rows = 200", "max_rows = 200\nmax_rowz = 5"), "max_rowz"),
     "wrong type": (VALID.replace("max_rows = 200", 'max_rows = "200"'), "max_rows"),
     "zero limit": (VALID.replace("max_depth = 3", "max_depth = 0"), "max_depth"),

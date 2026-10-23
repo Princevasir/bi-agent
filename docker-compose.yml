@@ -32,6 +32,9 @@ services:
       JWT_SECRET: ${JWT_SECRET:-}
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-60}
       DATABASE_URL_LIMITED: postgresql://bi_limited:limited_dev_pw@db:5432/analytics
+      DATA_SOURCE: ${DATA_SOURCE:-sample}
+      RETAIL_DATABASE_URL: postgresql://retail_analyst:retail_analyst_dev_pw@db:5432/retail
+      RETAIL_DATABASE_URL_LIMITED: postgresql://retail_limited:retail_limited_dev_pw@db:5432/retail
   frontend:
     build: ./frontend
     ports:
