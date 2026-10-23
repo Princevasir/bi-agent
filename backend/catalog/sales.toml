@@ -1,0 +1,95 @@
+domain = "Sales"
+
+[tables.promotions]
+description = "Discount codes and sales events."
+grain = "One row per promotion."
+[tables.promotions.columns]
+promotion_id = "Promotion key."
+name = "Promotion name, for example 'Spring Trail Sale'."
+code = "Code customers use, for example 'SPRINGTRAIL25'."
+discount_pct = { description = "Discount the promotion gives.", unit = "percent" }
+channel = { description = "Where the promotion applies.", values = ["online", "store", "all"] }
+starts_on = "First day of the promotion."
+ends_on = "Last day of the promotion (inclusive)."
+
+[tables.orders]
+description = "Customer orders, online and in stores, January 2024 to September 2026."
+grain = "One row per order."
+caveats = [
+  "Revenue counts completed orders only: filter status = 'completed'. Cancelled orders stay in the table.",
+  "Order totals are already summed from their items. Never SUM(orders.total_amount) after joining order_items: each order would be counted once per item.",
+  "Guest checkouts have an empty customer_id; an inner join to customers drops them. Use a LEFT JOIN when counting all orders.",
+  "Store orders have a store_id and no shipping; online orders have no store_id.",
+  "Returns are not subtracted here; they are in returns, per item.",
+]
+[tables.orders.columns]
+order_id = "Order key."
+customer_id = "Customer who placed the order; empty for guest checkouts."
+channel = { description = "Where the order was placed.", values = ["online", "store"] }
+store_id = "Store for store orders; empty for online orders."
+shipping_address_id = "Delivery address for online orders of registered customers."
+ordered_at = "When the order was placed (store local time)."
+status = { description = "Order outcome.", values = ["completed", "cancelled"] }
+subtotal = { description = "Sum of quantity times unit price over the items, before discounts.", unit = "USD" }
+discount_amount = { description = "Total of the item discounts.", unit = "USD" }
+shipping_fee = { description = "Shipping charged to the customer; 0 for store orders and online orders of 100 or more.", unit = "USD" }
+total_amount = { description = "subtotal - discount_amount + shipping_fee.", unit = "USD" }
+
+[tables.order_items]
+description = "Products on each order, with the price actually paid."
+grain = "One row per product on an order."
+caveats = [
+  "unit_price is the price paid on the order date; it can differ from the current list price in product_prices.",
+  "line_total = quantity * unit_price - discount_amount. Product revenue is SUM(line_total) for completed orders.",
+]
+[tables.order_items.columns]
+order_item_id = "Order line key."
+order_id = "Order the line belongs to."
+product_id = "Product bought."
+quantity = { description = "Units bought.", unit = "units" }
+unit_price = { description = "List price of one unit on the order date.", unit = "USD" }
+discount_amount = { description = "Promotion and loyalty discount on the line.", unit = "USD" }
+line_total = { description = "What the customer paid for the line: quantity * unit_price - discount_amount.", unit = "USD" }
+
+[tables.order_promotions]
+description = "Which promotion codes were used on which orders."
+grain = "One row per order and promotion."
+[tables.order_promotions.columns]
+order_id = "Order."
+promotion_id = "Promotion used."
+
+[tables.payments]
+description = "Payments taken for orders. A few orders are split between a gift card and another method."
+grain = "One row per payment."
+caveats = ["Cancelled orders have a refunded payment; captured payments add up to the order total for completed orders."]
+[tables.payments.columns]
+payment_id = "Payment key."
+order_id = "Order paid for."
+method = { description = "How the customer paid.", values = ["card", "paypal", "gift_card", "cash"] }
+amount = { description = "Amount of this payment.", unit = "USD" }
+paid_at = "When the payment was taken."
+status = { description = "Payment outcome.", values = ["captured", "refunded"] }
+
+[tables.shipments]
+description = "Deliveries of completed online orders from a warehouse."
+grain = "One row per shipped order."
+[tables.shipments.columns]
+shipment_id = "Shipment key."
+order_id = "Order shipped."
+warehouse_id = "Warehouse it was shipped from."
+carrier = { description = "Delivery company.", values = ["SwiftShip", "ParcelPeak", "Northline Freight"] }
+shipped_at = "When it left the warehouse."
+delivered_at = "When it was delivered; empty if still in transit or lost."
+shipping_cost = { description = "What the delivery cost the company.", unit = "USD" }
+
+[tables.returns]
+description = "Items customers sent back, with the refund paid."
+grain = "One row per return of an order line."
+caveats = ["Net revenue = SUM(order_items.line_total) for completed orders minus SUM(returns.refund_amount) for those items."]
+[tables.returns.columns]
+return_id = "Return key."
+order_item_id = "Order line returned."
+quantity = { description = "Units returned.", unit = "units" }
+reason = { description = "Why it was returned. 'recall' is the Ridgeline 300 Headlamp recall of June 2025.", values = ["defective", "wrong_size", "changed_mind", "damaged", "recall"] }
+returned_at = "When the return was received."
+refund_amount = { description = "Refund paid.", unit = "USD" }

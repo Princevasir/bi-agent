@@ -252,6 +252,7 @@ backend/
     llm/             LLM interface, OpenRouter and fake providers, token budget
     bi/              metrics, schema, text-to-SQL, SQL validator, workflow graph,
                      grounding, follow-up rewrite, chart rules, conversation store
+  catalog/           data catalog: what every retail table and column means, governed metrics
   evals/             evaluation dataset (cases.json) and scoring harness
   retail/            retail demo data generator and loader
   tests/

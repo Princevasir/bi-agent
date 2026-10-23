@@ -1,0 +1,62 @@
+domain = "Product"
+
+[tables.categories]
+description = "Product category tree. Top-level categories (Camping, Hiking, Apparel, Climbing, Accessories) have no parent; some branches go three levels deep (Apparel > Jackets > Rain Jackets)."
+grain = "One row per category."
+caveats = ["Products sit in the lowest category. To total a top-level category, walk up parent_id (a recursive WITH query, or join categories to itself)."]
+[tables.categories.columns]
+category_id = "Category key."
+name = "Category name, for example 'Tents' or 'Rain Jackets'."
+parent_id = "Parent category; empty for a top-level category."
+
+[tables.brands]
+description = "Brands the company sells, including its own private label."
+grain = "One row per brand."
+[tables.brands.columns]
+brand_id = "Brand key."
+name = "Brand name."
+is_private_label = "True for the company's own brand (Trailhead Essentials)."
+
+[tables.suppliers]
+description = "Companies the products are bought from."
+grain = "One row per supplier."
+[tables.suppliers.columns]
+supplier_id = "Supplier key."
+name = "Supplier name, for example 'Summit Tentworks'."
+country_id = "Country the supplier is based in."
+reliability_rating = { description = "Internal rating of delivery reliability.", unit = "1 to 5" }
+
+[tables.products]
+description = "Products in the range, past and present."
+grain = "One row per product."
+caveats = ["The current price is not on this table; it is in product_prices. For what customers paid, use order_items.unit_price."]
+[tables.products.columns]
+product_id = "Product key."
+sku = "Stock-keeping unit code."
+name = "Product name."
+category_id = "Lowest-level category of the product."
+brand_id = "Brand of the product."
+unit_cost = { description = "What one unit costs the company to buy.", unit = "USD" }
+launched_on = "Date the product went on sale."
+discontinued_on = "Date the product stopped being sold; empty if still on sale. The Ridgeline 300 Headlamp was discontinued on 10 June 2025 after a recall."
+
+[tables.product_prices]
+description = "List price history of each product."
+grain = "One row per product per price period."
+caveats = ["Periods are contiguous: valid_to of one row equals valid_from of the next. The current price has an empty valid_to.", "The price on a given date is the row where valid_from <= date < valid_to (or valid_to is empty)."]
+[tables.product_prices.columns]
+product_price_id = "Price period key."
+product_id = "Product the price applies to."
+list_price = { description = "List price during the period.", unit = "USD" }
+valid_from = "First day the price applied."
+valid_to = "First day it no longer applied; empty for the current price."
+
+[tables.product_suppliers]
+description = "Which suppliers can supply each product, at what cost and lead time."
+grain = "One row per product and supplier."
+[tables.product_suppliers.columns]
+product_id = "Product supplied."
+supplier_id = "Supplier."
+unit_cost = { description = "Purchase cost per unit from this supplier.", unit = "USD" }
+lead_time_days = { description = "Usual days from purchase order to delivery.", unit = "days" }
+is_primary = "True for the supplier normally used for this product."

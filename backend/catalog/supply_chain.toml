@@ -1,0 +1,35 @@
+domain = "Supply chain"
+
+[tables.inventory_snapshots]
+description = "Stock levels per product and warehouse, taken every Monday."
+grain = "One row per Monday, warehouse and product on sale."
+caveats = ["Stock is a level, not a flow: average or take the latest snapshot, never sum snapshots over weeks."]
+[tables.inventory_snapshots.columns]
+snapshot_date = "Monday the stock was counted."
+warehouse_id = "Warehouse."
+product_id = "Product."
+quantity_on_hand = { description = "Units in the warehouse.", unit = "units" }
+quantity_on_order = { description = "Units ordered from suppliers but not yet received.", unit = "units" }
+
+[tables.purchase_orders]
+description = "Orders the company places with suppliers to restock warehouses."
+grain = "One row per purchase order."
+caveats = ["Delivery delay in days is received_on - expected_on; empty received_on means not yet delivered."]
+[tables.purchase_orders.columns]
+purchase_order_id = "Purchase order key."
+supplier_id = "Supplier ordered from."
+warehouse_id = "Warehouse to deliver to."
+ordered_on = "Date the order was placed."
+expected_on = "Date delivery was promised."
+received_on = "Date it was received; empty if open."
+status = { description = "Whether it has arrived.", values = ["open", "received"] }
+
+[tables.purchase_order_items]
+description = "Products on each purchase order."
+grain = "One row per product on a purchase order."
+[tables.purchase_order_items.columns]
+po_item_id = "Purchase order line key."
+purchase_order_id = "Purchase order."
+product_id = "Product ordered."
+quantity = { description = "Units ordered.", unit = "units" }
+unit_cost = { description = "Cost per unit.", unit = "USD" }

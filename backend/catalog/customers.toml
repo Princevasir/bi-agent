@@ -1,0 +1,49 @@
+domain = "Customers"
+
+[tables.loyalty_tiers]
+description = "Loyalty programme levels."
+grain = "One row per tier."
+[tables.loyalty_tiers.columns]
+tier_id = "Tier key."
+name = { description = "Tier name, lowest to highest.", values = ["Bronze", "Silver", "Gold", "Platinum"] }
+min_annual_spend = { description = "Yearly spend that qualifies for the tier.", unit = "USD" }
+discount_pct = { description = "Member discount applied to every order.", unit = "percent" }
+
+[tables.customers]
+description = "Registered customers. Guest checkouts are not customers (orders.customer_id is empty for them)."
+grain = "One row per customer."
+[tables.customers.columns]
+customer_id = "Customer key."
+first_name = { description = "First name.", pii = true }
+last_name = { description = "Last name.", pii = true }
+email = { description = "Email address.", pii = true }
+phone = { description = "Phone number.", pii = true }
+birth_year = "Year of birth; empty when not given."
+country_id = "Home country."
+signup_date = "Date the customer registered."
+acquisition_channel = { description = "How the customer first found the company.", values = ["organic", "search", "social", "email", "referral", "store"] }
+marketing_opt_in = "True if the customer agreed to marketing email."
+
+[tables.customer_addresses]
+description = "Shipping and billing addresses of customers."
+grain = "One row per address."
+[tables.customer_addresses.columns]
+address_id = "Address key."
+customer_id = "Customer the address belongs to."
+address_type = { description = "What the address is used for.", values = ["shipping", "billing"] }
+street = { description = "Street line.", pii = true }
+city = "City."
+postal_code = { description = "Postal code.", pii = true }
+country_id = "Country."
+is_default = "True for the customer's default address."
+
+[tables.loyalty_memberships]
+description = "Loyalty tier history of each customer."
+grain = "One row per customer per tier period."
+caveats = ["A customer's current tier is the row with an empty valid_to. Some customers moved up a tier, so they have an earlier row too; filter on valid_to IS NULL to count members per tier."]
+[tables.loyalty_memberships.columns]
+membership_id = "Membership period key."
+customer_id = "Customer."
+tier_id = "Tier held during the period."
+valid_from = "First day in the tier."
+valid_to = "First day no longer in the tier; empty if current."

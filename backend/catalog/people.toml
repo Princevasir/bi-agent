@@ -1,0 +1,24 @@
+domain = "People"
+
+[tables.departments]
+description = "Company departments."
+grain = "One row per department."
+[tables.departments.columns]
+department_id = "Department key."
+name = "Department name, for example 'Store Operations'."
+
+[tables.employees]
+description = "Employees, at headquarters and in stores."
+grain = "One row per employee."
+caveats = ["manager_id points to another employee; the chief executive has none. Use a recursive WITH query to walk the reporting line."]
+[tables.employees.columns]
+employee_id = "Employee key."
+first_name = { description = "First name.", pii = true }
+last_name = { description = "Last name.", pii = true }
+email = { description = "Work email.", pii = true }
+department_id = "Department."
+store_id = "Store for store staff; empty for headquarters."
+manager_id = "Employee this person reports to."
+job_title = "Job title, for example 'Store Manager'."
+hired_on = "Start date."
+salary = { description = "Yearly salary.", unit = "USD", pii = true }

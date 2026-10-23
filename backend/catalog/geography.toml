@@ -1,0 +1,41 @@
+# Data catalog: Geography. Types, keys and relationships come from the database; this file
+# holds what the database cannot say: meaning, grain, allowed values and traps.
+domain = "Geography"
+
+[tables.regions]
+description = "Sales regions the company reports on."
+grain = "One row per region."
+[tables.regions.columns]
+region_id = "Region key."
+name = { description = "Region name.", values = ["North America", "Europe", "Asia Pacific"] }
+
+[tables.countries]
+description = "Countries where customers, stores, warehouses or suppliers are located."
+grain = "One row per country."
+[tables.countries.columns]
+country_id = "Country key."
+name = "Country name in English, for example 'United States'."
+iso_code = "Two-letter ISO 3166 country code, for example 'US'."
+region_id = "Region the country belongs to."
+
+[tables.stores]
+description = "Physical stores. Store sales appear in orders with channel 'store'."
+grain = "One row per store."
+caveats = ["Boulder Basecamp opened on 1 July 2025; it has no sales before that date, so compare stores over periods when all were open."]
+[tables.stores.columns]
+store_id = "Store key."
+name = "Store name, for example 'Seattle Flagship'."
+city = "City the store is in."
+country_id = "Country the store is in."
+store_type = { description = "Kind of store.", values = ["flagship", "standard", "outlet"] }
+opened_on = "Date the store opened."
+square_meters = { description = "Sales floor area.", unit = "square meters" }
+
+[tables.warehouses]
+description = "Distribution centres that ship online orders and hold stock."
+grain = "One row per warehouse."
+[tables.warehouses.columns]
+warehouse_id = "Warehouse key."
+name = "Warehouse name, for example 'Reno DC'."
+city = "City the warehouse is in."
+country_id = "Country the warehouse is in."

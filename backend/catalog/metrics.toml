@@ -1,0 +1,42 @@
+# Governed metrics: the one agreed way to compute each business measure.
+[metrics.revenue]
+description = "Money customers paid for completed orders, after discounts, before returns and shipping."
+expression = "SUM(order_items.line_total)"
+filters = ["orders.status = 'completed'"]
+tables = ["orders", "order_items"]
+unit = "USD"
+
+[metrics.net_revenue]
+description = "Revenue minus refunds for returned items (LEFT JOIN returns on order_item_id). Correct because each order line has at most one return in this data."
+expression = "SUM(order_items.line_total) - COALESCE(SUM(returns.refund_amount), 0)"
+filters = ["orders.status = 'completed'"]
+tables = ["orders", "order_items", "returns"]
+unit = "USD"
+
+[metrics.order_count]
+description = "Number of completed orders."
+expression = "COUNT(DISTINCT orders.order_id)"
+filters = ["orders.status = 'completed'"]
+tables = ["orders"]
+unit = "orders"
+
+[metrics.units_sold]
+description = "Units sold on completed orders."
+expression = "SUM(order_items.quantity)"
+filters = ["orders.status = 'completed'"]
+tables = ["orders", "order_items"]
+unit = "units"
+
+[metrics.average_order_value]
+description = "Average amount paid per completed order, after discounts, excluding shipping."
+expression = "SUM(order_items.line_total) / COUNT(DISTINCT orders.order_id)"
+filters = ["orders.status = 'completed'"]
+tables = ["orders", "order_items"]
+unit = "USD"
+
+[metrics.return_rate]
+description = "Share of units sold on completed orders that were returned."
+expression = "COALESCE(SUM(returns.quantity), 0)::numeric / SUM(order_items.quantity)"
+filters = ["orders.status = 'completed'"]
+tables = ["orders", "order_items", "returns"]
+unit = "fraction"

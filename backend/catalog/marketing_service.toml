@@ -1,0 +1,38 @@
+domain = "Marketing and service"
+
+[tables.campaigns]
+description = "Marketing campaigns that drive visits to the website."
+grain = "One row per campaign."
+[tables.campaigns.columns]
+campaign_id = "Campaign key."
+name = "Campaign name."
+channel = { description = "Marketing channel.", values = ["email", "social", "search", "display"] }
+starts_on = "First day of the campaign."
+ends_on = "Last day of the campaign."
+budget = { description = "Planned spend.", unit = "USD" }
+
+[tables.web_sessions]
+description = "Visits to the online store."
+grain = "One row per visit."
+caveats = ["A visit that ended in a purchase has an order_id. Conversion rate = visits with an order_id / all visits."]
+[tables.web_sessions.columns]
+session_id = "Visit key."
+customer_id = "Signed-in customer; empty for anonymous visits."
+campaign_id = "Campaign the visit came from; empty if none."
+started_at = "When the visit started."
+device = { description = "Device used.", values = ["desktop", "mobile", "tablet"] }
+pages_viewed = { description = "Pages viewed during the visit.", unit = "pages" }
+order_id = "Order placed during the visit; empty if none."
+
+[tables.support_tickets]
+description = "Customer service requests."
+grain = "One row per ticket."
+[tables.support_tickets.columns]
+ticket_id = "Ticket key."
+customer_id = "Customer who asked."
+order_id = "Order the ticket is about; empty for account questions."
+category = { description = "Topic of the ticket.", values = ["delivery", "product_issue", "return", "billing", "account"] }
+priority = { description = "Urgency.", values = ["low", "medium", "high"] }
+opened_at = "When the ticket was opened."
+closed_at = "When it was resolved; empty if still open."
+satisfaction_score = { description = "Customer rating after closing; empty if not given.", unit = "1 to 5" }
