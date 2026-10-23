@@ -29,3 +29,13 @@ def sql_max_result_bytes():
 def sql_timeout_ms():
     """Statement timeout per query."""
     return _positive_int("SQL_TIMEOUT_MS", 5000)
+
+
+def sql_max_tables():
+    """Table references per query, counting repeats (GR-SQL-02)."""
+    return _positive_int("SQL_MAX_TABLES", 8)
+
+
+def sql_max_depth():
+    """How deeply SELECTs may be nested inside other SELECTs (GR-SQL-02)."""
+    return _positive_int("SQL_MAX_DEPTH", 3)

@@ -47,7 +47,7 @@ The full list of what the project offers today. Keep it current as features land
 - Conversation history per user, readable through `GET /conversations/{id}`.
 
 ### Safety and access control
-- Every generated query passes a validator before it runs: exactly one `SELECT` (or a `UNION`, `INTERSECT` or `EXCEPT` of them), no write hidden anywhere in it, allowed tables only, no schema-qualified names, only functions from an approved list (so nothing that runs SQL from a string, reads server settings, or builds huge values), no `SELECT INTO` or locking.
+- Every generated query passes a validator before it runs: exactly one `SELECT` (or a `UNION`, `INTERSECT` or `EXCEPT` of them), no write hidden anywhere in it, allowed tables only, no schema-qualified names, only functions from an approved list (so nothing that runs SQL from a string, reads server settings, or builds huge values), no `SELECT INTO` or locking, no joins without a join condition, at most 8 tables and 3 levels of nested subqueries. Queries that are too broad get a message suggesting a more specific question.
 - Queries run through a read-only database login with a 5-second timeout and a 200-row cap. Rows are read in small batches, so a query matching millions of rows never loads them into the backend.
 - Two roles: `analyst` (orders and regions) and `limited` (regions only), each with its own database login, so the database refuses what the role may not read even if the validator were bypassed.
 - The model only sees the tables the user's role may see.
@@ -179,6 +179,8 @@ Set in `.env`; defaults come from `docker-compose.yml`.
 | `SQL_MAX_ROWS` | 200 | Rows returned per query; more are never read from the database |
 | `SQL_MAX_RESULT_BYTES` | 1000000 | Approximate size of the rows returned per query; a single larger row is refused |
 | `SQL_TIMEOUT_MS` | 5000 | Statement timeout per query |
+| `SQL_MAX_TABLES` | 8 | Table references allowed in one query |
+| `SQL_MAX_DEPTH` | 3 | How deeply subqueries may be nested |
 | `LOG_LEVEL` | `INFO` | Backend log level |
 | `LOG_FORMAT` | `json` | `json` (one JSON object per line) or `text` for easier local reading |
 

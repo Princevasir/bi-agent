@@ -1,5 +1,6 @@
 import pytest
 
+from app.bi import sql_guard as validate_sql_module
 from app.bi.sql_guard import SQLRejected, validate_sql
 
 REJECTED = [
@@ -133,3 +134,81 @@ ACCEPTED = {
 @pytest.mark.parametrize("sql", ACCEPTED.values(), ids=ACCEPTED.keys())
 def test_normal_analytics_sql_is_accepted(sql):
     assert validate_sql(sql)
+
+
+# ---- GR-SQL-02: query structure limits --------------------------------------
+
+def nine_table_join():
+    return "SELECT 1 FROM orders o0 " + " ".join(
+        f"JOIN orders o{i} ON o{i}.id = o{i - 1}.id" for i in range(1, 9))
+
+
+def nested(depth):
+    sql = "SELECT id FROM orders"
+    for _ in range(depth):
+        sql = f"SELECT id FROM ({sql}) AS s"
+    return sql
+
+
+TOO_BROAD = {
+    "T-SQL02-01 comma join without condition": "SELECT count(*) FROM orders, orders AS o2, orders AS o3",
+    "T-SQL02-02 cross join": "SELECT count(*) FROM orders CROSS JOIN regions",
+    "T-SQL02-03 on true": "SELECT 1 FROM orders o JOIN regions r ON true",
+    "T-SQL02-03 on constant comparison": "SELECT 1 FROM orders o JOIN regions r ON 1 = 1",
+    "T-SQL02-04 comma join with unrelated where": (
+        "SELECT 1 FROM orders o, regions r WHERE o.status = 'completed'"),
+    "T-SQL02-04 same-table comparison only": "SELECT 1 FROM orders o JOIN regions r ON o.id = o.region_id",
+    "T-SQL02-05 cross join inside a cte": (
+        "WITH x AS (SELECT o.id FROM orders o CROSS JOIN regions r) SELECT count(*) FROM x"),
+    "T-SQL02-06 nine tables": nine_table_join(),
+    "T-SQL02-07 subqueries four deep": nested(4),
+}
+
+
+@pytest.mark.parametrize("sql", TOO_BROAD.values(), ids=TOO_BROAD.keys())
+def test_too_broad_queries_are_rejected(sql):
+    with pytest.raises(SQLRejected) as e:
+        validate_sql(sql)
+    assert e.value.user_message == validate_sql_module.TOO_BROAD_MESSAGE
+
+
+STRUCTURE_OK = {
+    "T-SQL02-08 join on": "SELECT r.name FROM orders o JOIN regions r ON o.region_id = r.id",
+    "T-SQL02-08 left join": "SELECT r.name FROM regions r LEFT JOIN orders o ON o.region_id = r.id",
+    "T-SQL02-08 using": "SELECT 1 FROM orders JOIN regions USING (id)",
+    "T-SQL02-08 comma join with condition in where": (
+        "SELECT r.name, sum(o.amount) FROM orders o, regions r WHERE o.region_id = r.id GROUP BY r.name"),
+    "T-SQL02-08 unqualified join columns": "SELECT 1 FROM orders JOIN regions ON region_id = id",
+    "T-SQL02-08 self join": "SELECT 1 FROM orders a JOIN orders b ON a.region_id = b.region_id AND a.id < b.id",
+    "T-SQL02-09 share of a one-row total": (
+        "SELECT r.name, sum(o.amount) / t.total FROM orders o JOIN regions r ON o.region_id = r.id "
+        "CROSS JOIN (SELECT sum(amount) AS total FROM orders) AS t GROUP BY r.name, t.total"),
+    "T-SQL02-09 one-row cte": (
+        "WITH t AS (SELECT sum(amount) AS total FROM orders) "
+        "SELECT o.id, o.amount / t.total FROM orders o CROSS JOIN t"),
+    "T-SQL02-10 eight tables": "SELECT 1 FROM orders o0 " + " ".join(
+        f"JOIN orders o{i} ON o{i}.id = o{i - 1}.id" for i in range(1, 8)),
+    "T-SQL02-10 subqueries three deep": nested(3),
+    "T-SQL02-10 union branches are not nesting": (
+        "SELECT id FROM orders UNION SELECT id FROM orders UNION SELECT id FROM orders UNION SELECT id FROM orders"),
+}
+
+
+@pytest.mark.parametrize("sql", STRUCTURE_OK.values(), ids=STRUCTURE_OK.keys())
+def test_well_formed_queries_pass_the_structure_limits(sql):
+    assert validate_sql(sql)
+
+
+def test_structure_limits_come_from_the_environment(monkeypatch):
+    monkeypatch.setenv("SQL_MAX_TABLES", "2")
+    with pytest.raises(SQLRejected):
+        validate_sql("SELECT 1 FROM orders o JOIN regions r ON o.region_id = r.id JOIN regions r2 ON r2.id = r.id")
+    monkeypatch.setenv("SQL_MAX_DEPTH", "1")
+    with pytest.raises(SQLRejected):
+        validate_sql(nested(2))
+
+
+def test_other_rejections_keep_the_generic_message():
+    with pytest.raises(SQLRejected) as e:
+        validate_sql("SELECT * FROM internal_notes")
+    assert e.value.user_message is None

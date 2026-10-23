@@ -118,7 +118,8 @@ async def db_error_handler(request: Request, exc: DBError):
 async def sql_rejected_handler(request: Request, exc: SQLRejected):
     logger.warning("request_id=%s sql_rejected=%s", _rid(request), exc)
     audit_event(request, "sql_rejected", 422, reason=str(exc))
-    return JSONResponse(status_code=422, content={"detail": "The generated query was rejected."})
+    return JSONResponse(status_code=422,
+                        content={"detail": exc.user_message or "The generated query was rejected."})
 
 
 @app.exception_handler(AuthConfigError)

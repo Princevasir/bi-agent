@@ -126,3 +126,12 @@ def test_the_inventory_notices_an_unprotected_route():
         return {}
 
     assert unprotected_routes(probe) == ["/open"]
+
+
+def test_too_broad_query_gets_a_helpful_message(audit_events):
+    app.dependency_overrides[get_llm] = lambda: RoutedLLM("SELECT count(*) FROM orders, regions")
+    r = client.post("/ask", json={"message": "count everything"})
+    assert r.status_code == 422
+    assert r.json() == {"detail": "The generated query was too broad to run safely. "
+                                  "Try a more specific question, for example a shorter period or one grouping."}
+    assert [e["event"] for e in audit_events] == ["sql_rejected"]
