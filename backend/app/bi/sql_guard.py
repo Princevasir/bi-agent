@@ -3,6 +3,7 @@ from sqlglot import exp
 from sqlglot.errors import SqlglotError
 
 from app.bi.schema import ALLOWED_TABLES
+from app.sqltypes import ValidatedSQL
 
 # GR-SQL-01: functions are allowed only if listed here; widening the list is a security decision.
 # Typed functions are matched by sqlglot's node class name, unknown ones (Anonymous) by their SQL name.
@@ -56,7 +57,7 @@ def _check_functions(tree):
             raise SQLRejected(f"Function not permitted: {_function_name(f)}")
 
 
-def validate_sql(sql: str, allowed_tables = ALLOWED_TABLES) -> str:
+def validate_sql(sql: str, allowed_tables = ALLOWED_TABLES) -> ValidatedSQL:
     try:
         statements = [s for s in sqlglot.parse(sql, read="postgres") if s is not None]
     except SqlglotError as e:
@@ -81,4 +82,4 @@ def validate_sql(sql: str, allowed_tables = ALLOWED_TABLES) -> str:
         if t.name.lower() not in allowed_tables:
             raise SQLRejected(f"Table not permitted: {t.name}")
     _check_functions(tree)
-    return tree.sql(dialect="postgres")
+    return ValidatedSQL(tree.sql(dialect="postgres"))

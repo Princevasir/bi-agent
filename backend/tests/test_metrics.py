@@ -3,7 +3,7 @@ from datetime import date
 import pytest
 
 from app.bi.metrics import UnknownMetricError, build_metric_query
-from app.db import run_readonly
+from app.db import TrustedSQL, run_readonly
 
 SEP = (date(2026, 9, 1), date(2026, 10, 1))
 AUG_SEP = (date(2026, 8, 1), date(2026, 10, 1))
@@ -11,7 +11,7 @@ AUG_SEP = (date(2026, 8, 1), date(2026, 10, 1))
 
 def run(metric, dimension, period):
     sql, params = build_metric_query(metric, dimension, *period)
-    return run_readonly(sql, params)["rows"]
+    return run_readonly(TrustedSQL(sql), params)["rows"]
 
 
 @pytest.mark.integration

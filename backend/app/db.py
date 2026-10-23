@@ -6,6 +6,7 @@ import psycopg
 from psycopg import errors
 
 from app.access import db_env_for
+from app.sqltypes import TrustedSQL, ValidatedSQL
 
 
 class DBError(Exception):
@@ -14,6 +15,10 @@ class DBError(Exception):
 
 class DBTimeoutError(DBError):
     """Query exceeded the time limit."""
+
+
+class UnvalidatedSQLError(TypeError):
+    """SQL that came neither from validate_sql nor from TrustedSQL."""
 
 
 def _json_safe(v):
@@ -25,6 +30,8 @@ def _json_safe(v):
 
 
 def run_readonly(sql, params=None, max_rows=200, timeout_ms=5000, role="analyst"):
+    if not isinstance(sql, (ValidatedSQL, TrustedSQL)):
+        raise UnvalidatedSQLError("run_readonly needs SQL from validate_sql or a TrustedSQL constant.")
     url = os.getenv(db_env_for(role))
     if not url:
         raise DBError("DATABASE_URL is not set.")

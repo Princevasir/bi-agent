@@ -51,6 +51,7 @@ The full list of what the project offers today. Keep it current as features land
 - Queries run through a read-only database login with a 5-second timeout and a 200-row cap.
 - Two roles: `analyst` (orders and regions) and `limited` (regions only), each with its own database login, so the database refuses what the role may not read even if the validator were bypassed.
 - The model only sees the tables the user's role may see.
+- There is one way into the database for questions: the code refuses to run any SQL that did not come out of the validator, and a test fails if a new route skips sign-in.
 - Conversations are private: another user's conversation ID returns "not found".
 
 ### Accounts and sign-in
@@ -153,7 +154,7 @@ All routes except the first four need `Authorization: Bearer <token>` from `/aut
 | GET | `/ready` | Readiness: 200 when both databases answer, 503 otherwise |
 | POST | `/auth/login` | `{"username", "password"}` → access token and role |
 | POST | `/ask` | `{"message", "conversation_id"?}` → answer, SQL, rows, chart, conversation ID |
-| POST | `/ask/sql` | Generate SQL for a question without running it |
+| POST | `/ask/sql` | Generate and validate SQL for a question without running it (422 if the validator rejects it) |
 | GET | `/conversations/{id}` | Turns of one of your own conversations |
 | GET | `/schema` | Tables and columns your role can see |
 | GET | `/db/ping` | Database check as your role |

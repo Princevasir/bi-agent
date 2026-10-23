@@ -11,7 +11,7 @@ from app.access import AccessError, tables_for
 from app.bi.conversation import MAX_STORED_ROWS, Turn
 from app.bi.service import answer_question, has_data
 from app.bi.sql_guard import SQLRejected, validate_sql
-from app.db import DBError, run_readonly
+from app.db import DBError, TrustedSQL, run_readonly
 from app.llm.base import LLMError
 
 CASES_PATH = Path(__file__).with_name("cases.json")
@@ -151,8 +151,8 @@ def run_case(case, generate, today):
 
 def integrity_snapshot():
     """Counts that must not change during an evaluation run (read through the analyst login)."""
-    orders = run_readonly("SELECT COUNT(*), COALESCE(SUM(amount), 0) FROM orders")["rows"][0]
-    regions = run_readonly("SELECT COUNT(*) FROM regions")["rows"][0][0]
+    orders = run_readonly(TrustedSQL("SELECT COUNT(*), COALESCE(SUM(amount), 0) FROM orders"))["rows"][0]
+    regions = run_readonly(TrustedSQL("SELECT COUNT(*) FROM regions"))["rows"][0][0]
     return {"orders": orders[0], "orders_amount": float(orders[1]), "regions": regions}
 
 

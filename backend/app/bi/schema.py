@@ -1,5 +1,5 @@
 from app.bi.metrics import METRICS
-from app.db import run_readonly
+from app.db import TrustedSQL, run_readonly
 
 from app.access import ROLE_TABLES, tables_for
 
@@ -7,10 +7,10 @@ ALLOWED_TABLES = ROLE_TABLES["analyst"]
 
 
 def get_schema(role="analyst"):
-    result = run_readonly(
+    result = run_readonly(TrustedSQL(
         "SELECT table_name, column_name, data_type FROM information_schema.columns "
         "WHERE table_schema = 'public' AND table_name = ANY(%s) "
-        "ORDER BY table_name, ordinal_position",
+        "ORDER BY table_name, ordinal_position"),
         (list(tables_for(role)),),
         role=role,
     )

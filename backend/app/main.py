@@ -11,16 +11,16 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app import audit
-from app.access import AccessError
+from app.access import AccessError, tables_for
 from app.appdb import User, get_user
 from app.appdb import ping as appdb_ping
 from app.auth import AuthConfigError, authenticate, create_token, current_user
 from app.bi.conversation import MAX_STORED_ROWS, ConversationStore, Turn
 from app.bi.schema import get_schema
 from app.bi.service import answer_question
-from app.bi.sql_guard import SQLRejected
+from app.bi.sql_guard import SQLRejected, validate_sql
 from app.bi.text_to_sql import generate_sql, is_no_query
-from app.db import DBError, DBTimeoutError, run_readonly
+from app.db import DBError, DBTimeoutError, TrustedSQL, run_readonly
 from app.llm import get_llm
 from app.llm.base import (
     LLMConfigError, LLMError, LLMRateLimitError, LLMService, LLMTimeoutError,
@@ -177,7 +177,7 @@ def hello() -> dict[str, str]:
 @app.get("/ready")
 def ready():
     checks = {}
-    for name, check in (("analytics", lambda: run_readonly("SELECT 1")),
+    for name, check in (("analytics", lambda: run_readonly(TrustedSQL("SELECT 1"))),
                         ("appdb", appdb_ping)):
         try:
             check()
@@ -218,7 +218,7 @@ def chat(body: ChatRequest, request: Request,
 
 @app.get("/db/ping")
 def db_ping(user: User = Depends(signed_in)):
-    return run_readonly("SELECT 1 AS result", role=user.role)
+    return run_readonly(TrustedSQL("SELECT 1 AS result"), role=user.role)
 
 
 @app.get("/schema")
@@ -231,8 +231,7 @@ def ask_sql(body: ChatRequest, request: Request,
             user: User = Depends(signed_in),
             llm: LLMService = Depends(get_llm)):
     sql = generate_sql(body.message, make_generate(llm, request), date.today(), role=user.role)
-    if is_no_query(sql):
-        sql = ""
+    sql = "" if is_no_query(sql) else validate_sql(sql, tables_for(user.role))
     audit_event(request, "ask_sql", 200, question=body.message, sql=sql)
     return {"question": body.message, "sql": sql}
 

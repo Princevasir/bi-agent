@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.bi.text_to_sql import build_prompt, extract_sql
-from app.db import run_readonly
+from app.db import TrustedSQL, run_readonly
 from app.llm import get_llm
 from app.llm.base import LLMResult
 from app.main import app
@@ -45,11 +45,11 @@ def test_prompt_contains_schema_metrics_and_date():
 
 
 @pytest.mark.integration
-def test_ask_sql_returns_sql_without_executing_it():
+def test_ask_sql_rejects_unsafe_sql_without_executing_it():
     llm = ScriptedLLM("```sql\nDROP TABLE orders\n```")
     app.dependency_overrides[get_llm] = lambda: llm
     r = client.post("/ask/sql", json={"message": "drop everything"})
-    assert r.status_code == 200
-    assert r.json() == {"question": "drop everything", "sql": "DROP TABLE orders"}
+    assert r.status_code == 422  # GR-SQL-06: /ask/sql validates like /ask
+    assert r.json() == {"detail": "The generated query was rejected."}
     assert len(llm.prompts) == 1
-    assert run_readonly("SELECT count(*) FROM orders")["rows"] == [[12]]
+    assert run_readonly(TrustedSQL("SELECT count(*) FROM orders"))["rows"] == [[12]]

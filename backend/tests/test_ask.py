@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app.db import run_readonly
+from app.db import TrustedSQL, run_readonly
 from app.llm import get_llm
 from app.llm.base import LLMResult
 from app.main import app
@@ -39,7 +39,7 @@ def clear_overrides():
 
 
 def order_count():
-    return run_readonly("SELECT count(*) FROM orders")["rows"]
+    return run_readonly(TrustedSQL("SELECT count(*) FROM orders"))["rows"]
 
 
 @pytest.mark.integration

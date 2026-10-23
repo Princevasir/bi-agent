@@ -10,7 +10,7 @@ from app.auth import current_user
 from app.bi.schema import get_schema, metrics_text
 from app.bi.sql_guard import SQLRejected, validate_sql
 from app.bi.text_to_sql import build_prompt
-from app.db import DBError, run_readonly
+from app.db import DBError, TrustedSQL, run_readonly
 from app.llm import get_llm
 from app.main import app
 from routed_llm import RoutedLLM
@@ -41,8 +41,8 @@ def test_validator_uses_the_roles_table_list():
 @pytest.mark.integration
 def test_database_refuses_orders_for_the_limited_login():
     with pytest.raises(DBError):
-        run_readonly("SELECT * FROM orders", role="limited")
-    assert run_readonly("SELECT name FROM regions", role="limited")["rows"]
+        run_readonly(TrustedSQL("SELECT * FROM orders"), role="limited")
+    assert run_readonly(TrustedSQL("SELECT name FROM regions"), role="limited")["rows"]
 
 
 @pytest.mark.integration
@@ -55,7 +55,7 @@ def test_limited_role_schema_prompt_and_metrics():
 @pytest.mark.integration
 def test_unknown_role_is_refused_before_connecting():
     with pytest.raises(AccessError):
-        run_readonly("SELECT 1", role="admin")
+        run_readonly(TrustedSQL("SELECT 1"), role="admin")
 
 
 @pytest.fixture(autouse=True)
