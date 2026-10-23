@@ -62,7 +62,7 @@ The full list of what the project offers today. Keep it current as features land
 - Sign-in form, sign-out button and session-expired handling in the UI; the token never reaches the browser.
 
 ### Interface
-- A branded, themed chat (Trailhead Outfitters) with a welcome screen of clickable example questions for your role, and the same examples in the sidebar.
+- A themed chat with a welcome screen of clickable example questions for your role, and the same examples in the sidebar.
 - Each answer as a headline with tabs for an interactive Plotly chart, the table and the SQL; single numbers get a big-number card; monthly results are labelled "Aug 2026" rather than timestamps.
 - Clear, distinct notes for declined questions, empty results, queries that were too broad or rejected, access denied, rate limits, timeouts and an unavailable model.
 - Streamlit's usage statistics are turned off.

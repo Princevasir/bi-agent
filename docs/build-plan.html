@@ -3265,7 +3265,7 @@ backend/.venv/bin/python -m pytest image_tests</code></pre>
 <p><b>New dependency:</b> <code>plotly</code> in the frontend only (you asked for a chart library; Plotly is interactive, Seaborn makes static images). Everything else uses what Streamlit 1.66 already has.</p>
 <p><b>Testing:</b> Streamlit's built-in <code>AppTest</code> runs the real app script without a browser, so UI behaviour gets red and green tests like the backend; looks are checked with a short browser checklist you run, since tests cannot judge appearance.</p>
 <details open><summary>F1: Look and layout (frontend only)</summary><div class="step"><ul>
-<li>Page title, icon, wide layout, custom theme (<code>frontend/.streamlit/config.toml</code>), header "Trailhead Outfitters · BI Agent".</li>
+<li>Page title, icon, wide layout, custom theme (<code>frontend/.streamlit/config.toml</code>), header "BI Agent" (changed on 23 October 2026 from "Trailhead Outfitters", your call: Trailhead is the fictional demo company in the retail data, not the product).</li>
 <li>Sign-in page: centred card with a one-line pitch.</li>
 <li>Welcome screen with clickable example questions.</li>
 <li>Answer card: headline answer; a big-number card for single-value results; tabs Chart, Table, SQL.</li>

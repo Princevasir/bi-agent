@@ -6,9 +6,9 @@ from charts import build_figure
 from client import BackendError
 from presentation import is_declined, is_no_data, pretty_label, single_value, status_for
 
-st.set_page_config(page_title="Trailhead BI Agent", page_icon="🏔️", layout="wide")
+st.set_page_config(page_title="BI Agent", page_icon="📊", layout="wide")
 
-BRAND = "Trailhead Outfitters"
+BRAND = "BI Agent"
 EXAMPLES = {
     "analyst": [
         "What was revenue by region in September 2026?",
@@ -57,8 +57,8 @@ def ask_later(question):
 def sign_in_page():
     _, middle, _ = st.columns([1, 1.3, 1])
     with middle, st.container(border=True):
-        st.markdown(f"## 🏔️ {BRAND}")
-        st.markdown("**BI Agent.** Ask questions about your business data in plain English and get "
+        st.markdown(f"## 📊 {BRAND}")
+        st.markdown("Ask questions about your business data in plain English and get "
                     "an answer, the SQL behind it, a table and a chart.")
         with st.form("login"):
             username = st.text_input("Username")
@@ -149,7 +149,7 @@ if not st.session_state.token:
     st.stop()
 
 with st.sidebar:
-    st.markdown(f"### 🏔️ {BRAND}")
+    st.markdown(f"### 📊 {BRAND}")
     st.markdown(f"Signed in as **{st.session_state.username}**  \nRole: `{st.session_state.role}`")
     left, right = st.columns(2)
     if left.button("New chat", key="new-conversation", width="stretch"):
@@ -163,7 +163,7 @@ with st.sidebar:
     for i, q in enumerate(examples()):
         st.button(q, key=f"side-example-{i}", on_click=ask_later, args=(q,), width="stretch")
 
-st.markdown("## BI Agent")
+st.markdown("## Ask your data")
 st.markdown('<p class="brand-sub">Answers from your company data. Every query is checked before it runs.</p>',
             unsafe_allow_html=True)
 
@@ -179,7 +179,7 @@ if not st.session_state.messages and not question:
         columns[i % 2].button(q, key=f"example-{i}", on_click=ask_later, args=(q,), width="stretch")
 
 for i, m in enumerate(st.session_state.messages):
-    with st.chat_message(m["role"], avatar="🧑" if m["role"] == "user" else "🏔️"):
+    with st.chat_message(m["role"], avatar="🧑" if m["role"] == "user" else "📊"):
         if m["role"] == "user":
             st.markdown(plain(m["content"]))
         else:
@@ -188,6 +188,6 @@ for i, m in enumerate(st.session_state.messages):
 if question:
     with st.chat_message("user", avatar="🧑"):
         st.markdown(plain(question))
-    with st.chat_message("assistant", avatar="🏔️"):
+    with st.chat_message("assistant", avatar="📊"):
         handle(question)
         show_answer(st.session_state.messages[-1], len(st.session_state.messages) - 1)

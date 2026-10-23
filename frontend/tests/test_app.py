@@ -197,3 +197,9 @@ def test_earlier_answers_are_drawn_before_a_new_question_is_sent(backend, monkey
     monkeypatch.setattr(client, "post_json", post_json)
     at.chat_input[0].set_value("Show revenue by month").run()
     assert seen["charts_already_drawn"] == 1
+
+
+def test_the_product_is_called_bi_agent_not_the_demo_company(backend):
+    for at in (AppTest.from_file(str(FRONTEND / "app.py"), default_timeout=20).run(), signed_in_app()):
+        text = all_text(at) + " ".join(str(e.value) for e in at.sidebar.markdown)
+        assert "BI Agent" in text and "Trailhead" not in text
