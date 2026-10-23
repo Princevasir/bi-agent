@@ -24,3 +24,6 @@ class LLMRateLimitError(LLMError):
 
 class LLMConfigError(LLMError):
     """Missing or invalid credentials, model, or settings."""
+
+class LLMBudgetError(LLMRateLimitError):
+    """Our own hourly token budget is used up (demo gap D5), as opposed to the provider throttling us."""

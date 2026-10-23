@@ -25,9 +25,9 @@ from app.db import (DBAccessError, DBError, DBQueryError, DBTimeoutError, Result
 from app.llm import get_llm
 from app.knowledge.context import knowledge_for
 from app.llm.base import (
-    LLMConfigError, LLMError, LLMRateLimitError, LLMService, LLMTimeoutError,
+    LLMBudgetError, LLMConfigError, LLMError, LLMRateLimitError, LLMService, LLMTimeoutError,
 )
-from app.llm.budget import TokenBudget
+from app.llm.budget import from_env as budget_from_env
 from app import policy
 from app.logging_setup import configure_logging
 from app.throttle import LoginThrottle
@@ -38,13 +38,14 @@ _policy = policy.get()
 logger.info("policy_loaded", extra={"policy_path": str(_policy.path), "policy_sha256": _policy.sha256})
 
 app = FastAPI(title="BI Agent API")
-budget = TokenBudget(int(os.getenv("LLM_TOKEN_BUDGET", "50000")))
+budget = budget_from_env()
 store = ConversationStore()
 throttle = LoginThrottle()
 
 # Most specific first; LLMError is the catch-all.
 LLM_ERRORS = [
     (LLMTimeoutError, 504, "The language model timed out."),
+    (LLMBudgetError, 429, "The question limit for this hour has been reached. Please try again later."),
     (LLMRateLimitError, 429, "Too many requests to the language model."),
     (LLMConfigError, 503, "The language model is not configured correctly."),
     (LLMError, 502, "The language model request failed."),
@@ -171,10 +172,12 @@ class LoginRequest(BaseModel):
 
 
 def make_generate(llm, request):
+    user = getattr(getattr(request.state, "user", None), "username", None)
+
     def generate(prompt: str) -> str:
-        budget.check()
+        budget.check(user)
         result = llm.generate(prompt)
-        budget.record(result.input_tokens + result.output_tokens)
+        budget.record(result.input_tokens + result.output_tokens, user)
         logger.info("llm_tokens", extra={
             "request_id": request.state.request_id,
             "input_tokens": result.input_tokens,

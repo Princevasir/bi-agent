@@ -264,7 +264,7 @@ svg text{font-family:inherit}
       <tr><td>The embedding model or knowledge index is down</td><td>The question is answered without knowledge; a warning is logged</td></tr>
       <tr><td>The database is down or slow</td><td>503 or 504; statement timeout; <code>/ready</code> reports which database is down</td></tr>
       <tr><td>A query returns millions of rows</td><td>Read in batches through a server-side cursor, capped by rows and bytes</td></tr>
-      <tr><td>Too many tokens are used</td><td>A token budget stops further model calls (429)</td></tr>
+      <tr><td>Too many tokens are used</td><td>A rolling hourly budget, in total and per user, pauses model calls (429) and refills on its own</td></tr>
       <tr><td>Someone guesses passwords</td><td>Five failures lock the account for 15 minutes (429)</td></tr>
     </tbody>
   </table></div>
@@ -364,7 +364,7 @@ open http://localhost:8501</pre>
       <tr><td>D2</td><td>Five specialist agents, coordinator inside the graph, agent trace</td><td>Mandatory: agents, coordinator, boundaries</td><td><span class="tag t-ok">done</span></td></tr>
       <tr><td>D3</td><td>Sources and a "How I answered" panel in the UI</td><td>RAG: source citation; agents visible</td><td><span class="tag t-ok">done</span></td></tr>
       <tr><td>D4</td><td>Setup in three commands</td><td>Code quality: run it in 3 commands</td><td><span class="tag t-ok">done</span></td></tr>
-      <tr><td>D5</td><td>A token budget that cannot end the demo</td><td>Cost controls without breaking the demo</td><td><span class="tag t-brand">planned</span></td></tr>
+      <tr><td>D5</td><td>A token budget that cannot end the demo</td><td>Cost controls without breaking the demo</td><td><span class="tag t-ok">done</span></td></tr>
       <tr><td>D6</td><td>Fast demo model (Groq), local model as fallback</td><td>Demo reliability</td><td><span class="tag t-brand">planned</span></td></tr>
       <tr><td>D7</td><td>Answers from knowledge alone, with citations</td><td>RAG adds real value</td><td><span class="tag t-brand">planned</span></td></tr>
       <tr><td>D8</td><td>Automated dry run of the demo scenarios on retail data</td><td>5+ test scenarios; break your own system</td><td><span class="tag t-brand">planned</span></td></tr>
