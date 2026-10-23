@@ -198,14 +198,16 @@ def _rule(raw, tables):
 # ---- the database side ----------------------------------------------------------------------------
 
 COLUMNS_SQL = """
-    SELECT table_name, column_name, data_type FROM information_schema.columns
+    SELECT table_name, column_name, data_type, is_nullable FROM information_schema.columns
     WHERE table_schema = 'public' ORDER BY table_name, ordinal_position"""
+# From pg_constraint, not information_schema.key_column_usage: the latter shows keys only for
+# tables the login owns, so a read-only login would see none.
 PRIMARY_KEYS_SQL = """
-    SELECT tc.table_name, kcu.column_name FROM information_schema.table_constraints tc
-    JOIN information_schema.key_column_usage kcu
-      ON kcu.constraint_name = tc.constraint_name AND kcu.table_schema = tc.table_schema
-    WHERE tc.constraint_type = 'PRIMARY KEY' AND tc.table_schema = 'public'
-    ORDER BY tc.table_name, kcu.ordinal_position"""
+    SELECT c.conrelid::regclass::text, a.attname FROM pg_constraint c
+    CROSS JOIN LATERAL unnest(c.conkey) WITH ORDINALITY AS k(attnum, position)
+    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.attnum
+    WHERE c.contype = 'p' AND c.connamespace = 'public'::regnamespace
+    ORDER BY 1, k.position"""
 FOREIGN_KEYS_SQL = """
     SELECT c.conrelid::regclass::text, a.attname, c.confrelid::regclass::text, af.attname
     FROM pg_constraint c
@@ -221,9 +223,10 @@ def introspect(run):
     """Tables as the database sees them. `run(sql, params)` returns rows; with a role's read-only
     login, Postgres lists only the tables and columns that login may read."""
     db = {}
-    for table, column, dtype in run(COLUMNS_SQL):
-        db.setdefault(table, {"columns": {}, "primary_key": [], "foreign_keys": [], "rows": 0})
+    for table, column, dtype, nullable in run(COLUMNS_SQL):
+        db.setdefault(table, {"columns": {}, "nullable": {}, "primary_key": [], "foreign_keys": [], "rows": 0})
         db[table]["columns"][column] = dtype
+        db[table]["nullable"][column] = nullable == "YES"
     for table, column in run(PRIMARY_KEYS_SQL):
         if table in db:
             db[table]["primary_key"].append(column)
@@ -254,3 +257,36 @@ def drift(cat, db):
 def get():
     """The catalog in backend/catalog, loaded once."""
     return load()
+
+
+def merged(cat, db):
+    """The complete catalog: people's descriptions joined to the database's types, keys and
+    relationships, one entry per table described in both, grouped by business area."""
+    referenced_by = {}
+    for name, live in db.items():
+        for column, ref_table, _ in live["foreign_keys"]:
+            referenced_by.setdefault(ref_table, []).append({"table": name, "column": column})
+    order = sorted((t for t in cat.tables.values() if t.name in db),
+                   key=lambda t: (DOMAINS.index(t.domain), t.name))
+    full = {}
+    for table in order:
+        live = db[table.name]
+        refs = {col: f"{ref}.{ref_col}" for col, ref, ref_col in live["foreign_keys"]}
+        columns = []
+        for name, dtype in live["columns"].items():
+            c = table.columns.get(name)
+            columns.append({
+                "name": name, "type": dtype, "nullable": live.get("nullable", {}).get(name, True),
+                "primary_key": name in live["primary_key"], "references": refs.get(name),
+                "description": c.description if c else "", "values": list(c.values) if c else [],
+                "unit": c.unit if c else "", "pii": c.pii if c else False,
+            })
+        full[table.name] = {
+            "name": table.name, "domain": table.domain, "description": table.description,
+            "grain": table.grain, "caveats": list(table.caveats), "primary_key": list(live["primary_key"]),
+            "foreign_keys": sorted(({"column": col, "table": ref, "references": ref_col}
+                                    for col, ref, ref_col in live["foreign_keys"]), key=lambda f: f["column"]),
+            "referenced_by": sorted(referenced_by.get(table.name, []), key=lambda r: (r["table"], r["column"])),
+            "rows": live["rows"], "columns": columns,
+        }
+    return full

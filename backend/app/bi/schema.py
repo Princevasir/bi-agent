@@ -58,6 +58,8 @@ def _catalog_text(source, role):
             cols.append(f"{column} {_short(dtype)}{extra}: {c.description}{unit}")
         joins = [f"{col} -> {ref}.{ref_col}" for col, ref, ref_col in live["foreign_keys"] if ref in allowed]
         lines = [f"{name}: {table.description} {table.grain}"]
+        if live["primary_key"]:
+            lines.append(f"  key: {', '.join(live['primary_key'])}")
         lines += [f"  - {c}" for c in cols]
         if joins:
             lines.append(f"  joins: {'; '.join(joins)}")

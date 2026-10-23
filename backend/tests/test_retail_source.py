@@ -218,3 +218,9 @@ def test_missing_status_filter_is_repaired_and_the_number_is_right(retail, loade
         truth = float(conn.execute(good).fetchone()[0])
     assert r.json()["sql_repairs"] == 1 and r.json()["rows"] == [[truth]]
     assert any("orders.status = 'completed'" in p and "previous query failed" in p for p in prompts)
+
+
+@pytest.mark.integration
+def test_retail_prompt_shows_primary_keys(retail, loaded):
+    text = schema.schema_text("analyst")
+    assert "  key: order_id" in text and "  key: snapshot_date, warehouse_id, product_id" in text

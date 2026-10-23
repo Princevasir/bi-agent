@@ -130,6 +130,8 @@ cd backend
 .venv/bin/python -m retail.load --scale full     # or --scale small for a quick 1% version
 ```
 
+The complete catalog of the retail data (every table and column with its type, keys, relationships and meaning) is in [`docs/data-catalog.html`](docs/data-catalog.html) and `backend/catalog/generated/catalog.json`. After changing the catalog files or the schema, regenerate both with `cd backend && .venv/bin/python -m retail.export_catalog`.
+
 Then set `DATA_SOURCE=retail` in `.env` and recreate the backend (`docker compose up -d backend`). Analysts can query all 29 tables except personal-data columns; limited users see geography and products only. With the local model, raise Ollama's context length to 16,384 (Ollama settings, or `launchctl setenv OLLAMA_CONTEXT_LENGTH 16384` and restart Ollama), because the retail prompt is about 4,700 tokens.
 
 ## Roles
@@ -255,7 +257,8 @@ backend/
     llm/             LLM interface, OpenRouter and fake providers, token budget
     bi/              metrics, schema, text-to-SQL, SQL validator, workflow graph,
                      grounding, follow-up rewrite, chart rules, conversation store
-  catalog/           data catalog: what every retail table and column means, governed metrics
+  catalog/           data catalog: what every retail table and column means, governed metrics,
+                     metric rules, SQL hints; generated/catalog.json is the full machine-readable catalog
   evals/             evaluation dataset (cases.json) and scoring harness
   retail/            retail demo data generator and loader
   tests/
