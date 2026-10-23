@@ -30,7 +30,7 @@ class FakeClient:
         self.response = response
 
     def post(self, url, **kwargs):
-        self.kwargs = kwargs
+        self.url, self.kwargs = url, kwargs
         return self.response
 
 

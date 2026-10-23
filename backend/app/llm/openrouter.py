@@ -8,11 +8,14 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 
 class OpenRouterLLM:
-    def __init__(self, api_key, model, max_tokens=512, timeout=20.0, client=None):
+    """Any OpenAI-compatible chat completions API: OpenRouter by default, or a local Ollama server."""
+
+    def __init__(self, api_key, model, max_tokens=512, timeout=20.0, client=None, url=OPENROUTER_URL):
         self.model = model
+        self.url = url
         self.max_tokens = max_tokens
         self.client = client or httpx.Client(
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers={"Authorization": f"Bearer {api_key}"} if api_key else {},
             timeout=httpx.Timeout(timeout, connect=5.0),
         )
 
@@ -24,7 +27,7 @@ class OpenRouterLLM:
             "temperature": 0,
         }
         try:
-            resp = self.client.post(OPENROUTER_URL, json=payload)
+            resp = self.client.post(self.url, json=payload)
             resp.raise_for_status()
             data = resp.json()
         except httpx.TimeoutException as e:

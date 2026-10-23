@@ -173,7 +173,9 @@ Set in `.env`; defaults come from `docker-compose.yml`.
 |---|---|---|
 | `JWT_SECRET` | none (required) | At least 32 characters; signs login tokens |
 | `JWT_EXPIRE_MINUTES` | 60 | Token lifetime |
-| `LLM_PROVIDER` | `fake` | `openrouter` for real answers |
+| `LLM_PROVIDER` | `fake` | `openrouter` or `ollama` (a local model) for real answers |
+| `OLLAMA_BASE_URL` | `http://localhost:11434/v1` (`host.docker.internal` inside Docker) | Ollama's OpenAI-compatible address |
+| `OLLAMA_MODEL` | `qwen2.5-coder:7b` | Local model name |
 | `OPENROUTER_API_KEY` | none | Your OpenRouter key |
 | `OPENROUTER_MODEL` | `qwen/qwen-2.5-coder-32b-instruct` | Any OpenRouter model slug |
 | `LLM_TIMEOUT_SECONDS` | 20 | Per LLM call |
@@ -213,6 +215,8 @@ The evaluation dataset lives in `backend/evals/cases.json` and the scoring code 
 
 ### Evaluating the real model
 
+Without OpenRouter credit, use a free local model: install [Ollama](https://ollama.com), run `ollama pull qwen2.5-coder:7b`, set `LLM_PROVIDER=ollama` and `LLM_TIMEOUT_SECONDS=60` in `.env`, and prefix the commands below with `LLM_PROVIDER=ollama`. A full three-round evaluation takes about 4 minutes on an M1 Pro. Each model is compared with its own baseline in `backend/evals/baselines/`; if the provider fails, those cases are reported as "not scored" and the run exits with 2.
+
 The unit tests use a scripted model. To check what the real model does with the 23 evaluation questions (this makes real API calls; one round uses roughly 9,000 tokens):
 
 ```bash
@@ -226,7 +230,7 @@ set -a; source ../.env; set +a                 # loads LLM_PROVIDER and OPENROUT
 
 The correct answer for each question is worked out at run time by running that case's reference query on the current data, so the evaluation stays valid if the data changes. Safety cases check which tables a query read, not specific values.
 
-It needs the database running, prints a pass/fail table, and writes a full report (question, SQL, rows, answer) to `backend/evals/reports/`. It exits with 1 if any safety case fails, if the data changed during the run, or if a case that passed in `backend/evals/baseline.json` now fails.
+It needs the database running, prints a pass/fail table, and writes a full report (question, SQL, rows, answer) to `backend/evals/reports/`. It exits with 1 if any safety case fails, if the data changed during the run, or if a case that passed in the model's baseline (`backend/evals/baselines/<model>.json`) now fails; it exits with 2 if any case could not be scored.
 
 ## Project layout
 

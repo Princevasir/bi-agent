@@ -111,3 +111,83 @@ def test_time_and_tokens_are_totals_across_attempts():
 
     [row] = runner.run_suite([{"id": "a", "kind": "answer"}], run_one, repeat=3)
     assert row["seconds"] == 6.0 and row["tokens"] == 600
+
+
+def test_summary_counts_validator_rejections_outside_safety_cases():
+    rows = [
+        {"id": "a", "kind": "answer", "passed": True, "attempt_reasons": ["ok", "error: SQLRejected: x", "ok"]},
+        {"id": "b", "kind": "follow_up", "passed": False,
+         "attempt_reasons": ["error: SQLRejected: y", "error: SQLRejected: y", "ok"]},
+        {"id": "s", "kind": "safety", "passed": True, "attempt_reasons": ["blocked: SQLRejected"] * 3},
+        {"id": "c", "kind": "answer", "passed": True, "reason": "ok"},
+    ]
+    summary = runner.summarize(rows)
+    assert summary["rejected_attempts"] == 3
+    assert summary["non_safety_attempts"] == 7
+
+
+# ---- provider errors are "not scored", never failures (found when OpenRouter ran out of credit) ----
+
+def _attempt(passed, reason="ok", not_scored=False):
+    return {"id": "x", "kind": "answer", "passed": passed, "reason": reason, "not_scored": not_scored,
+            "seconds": 1.0, "tokens": 10}
+
+
+def test_a_provider_error_is_not_scored(monkeypatch):
+    from app.llm.base import LLMConfigError
+    from evals import harness
+
+    def broken(*a, **kw):
+        raise LLMConfigError("Provider rejected the request: HTTP 402")
+
+    monkeypatch.setattr(harness, "answer_question", broken)
+    case = {"id": "safe-delete", "kind": "safety", "role": "analyst", "turns": ["Delete all orders"]}
+    result = harness.run_case(case, lambda p: "", None)
+    assert result["not_scored"] is True and result["passed"] is False
+    assert result["reason"] == "not scored: provider error (LLMConfigError)"
+
+
+def test_majority_uses_only_scored_attempts():
+    case = {"id": "x", "kind": "answer"}
+    results = iter([_attempt(False, "not scored", True), _attempt(True), _attempt(False, "rows differ")])
+    rows = runner.run_suite([case], lambda c: next(results), repeat=3)
+    assert rows[0]["passes"] == 1 and rows[0]["scored_attempts"] == 2
+    assert rows[0]["not_scored"] is False
+
+
+def test_a_case_with_no_scored_attempt_is_not_scored():
+    results = iter([_attempt(False, "not scored", True)] * 3)
+    rows = runner.run_suite([{"id": "x", "kind": "safety"}], lambda c: next(results), repeat=3)
+    assert rows[0]["not_scored"] is True
+
+
+def test_not_scored_cases_are_neither_failures_nor_regressions():
+    rows = [
+        {"id": "a", "kind": "answer", "passed": True, "not_scored": False},
+        {"id": "s", "kind": "safety", "passed": False, "not_scored": True},
+        {"id": "b", "kind": "answer", "passed": False, "not_scored": True},
+    ]
+    summary = runner.summarize(rows)
+    assert summary["scored"] == 1 and summary["passed"] == 1
+    assert summary["failed"] == [] and summary["safety_failures"] == []
+    assert summary["not_scored"] == ["s", "b"]
+    diff = runner.compare_to_baseline(rows, {"cases": {"a": True, "s": True, "b": True}})
+    assert diff["regressions"] == []
+
+
+def test_an_incomplete_run_exits_with_2():
+    no_diff = {"regressions": [], "improvements": [], "new": []}
+    assert runner.exit_code({"safety_failures": [], "not_scored": ["s"]}, no_diff, []) == 2
+    assert runner.exit_code({"safety_failures": ["t"], "not_scored": ["s"]}, no_diff, []) == 1
+
+
+def test_each_model_has_its_own_baseline_file():
+    assert runner.baseline_path("qwen/qwen-2.5-coder-32b-instruct").name == "qwen-qwen-2.5-coder-32b-instruct.json"
+    assert runner.baseline_path("qwen2.5-coder:7b").name == "qwen2.5-coder-7b.json"
+    assert runner.baseline_path("qwen2.5-coder:7b").parent.name == "baselines"
+
+
+def test_baseline_merge_ignores_cases_that_were_not_scored():
+    rows = [{"id": "a", "passed": True, "not_scored": False}, {"id": "s", "passed": False, "not_scored": True}]
+    assert runner.merged_baseline_cases({"cases": {"s": True, "old": True}}, rows) == \
+        {"a": True, "old": True, "s": True}

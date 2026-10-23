@@ -104,7 +104,7 @@ def run_case(case, generate, today):
     """Ask every turn of a case through the real workflow and score the last answer."""
     result = {"id": case["id"], "kind": case["kind"], "role": case["role"], "passed": False,
               "reason": "", "sql": None, "rows": None, "answer": None,
-              "answer_source": None, "interpreted_as": None}
+              "answer_source": None, "interpreted_as": None, "not_scored": False}
     history = []
     try:
         for question in case["turns"]:
@@ -118,7 +118,8 @@ def run_case(case, generate, today):
                       else f"error: {type(exc).__name__}: {exc}")
         return result
     except LLMError as exc:
-        result["reason"] = f"model error: {type(exc).__name__}"
+        # The provider failed (no credit, rate limit, timeout): this says nothing about the agent.
+        result.update(not_scored=True, reason=f"not scored: provider error ({type(exc).__name__})")
         return result
 
     rows = out["rows"]

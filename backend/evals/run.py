@@ -6,6 +6,7 @@ Usage (from backend/, database up, OpenRouter key in the environment):
 """
 import argparse
 import json
+import re
 import os
 import sys
 import time
@@ -18,7 +19,6 @@ from evals.harness import check_integrity, integrity_snapshot, load_cases, run_c
 
 HERE = Path(__file__).parent
 DEFAULT_TODAY = "2026-10-15"
-DEFAULT_MODEL = "qwen/qwen-2.5-coder-32b-instruct"
 LOCAL_DATABASES = {
     "DATABASE_URL": "postgresql://bi_readonly:readonly_dev_pw@localhost:5433/analytics",
     "DATABASE_URL_LIMITED": "postgresql://bi_limited:limited_dev_pw@localhost:5433/analytics",
@@ -28,42 +28,70 @@ LOCAL_DATABASES = {
 # ---- pure pieces (unit tested) ----
 
 def run_suite(cases, run_one, repeat=1):
-    """Run each case `repeat` times; it passes when most attempts pass."""
+    """Run each case `repeat` times; it passes when most scored attempts pass.
+
+    Attempts the provider could not answer are not scored; a case with none scored is not scored.
+    """
     rows = []
     for case in cases:
         results = [run_one(case) for _ in range(repeat)]
-        passes = sum(1 for r in results if r["passed"])
-        passed = passes * 2 > repeat
-        shown = next((r for r in results if r["passed"] == passed), results[-1])
+        scored = [r for r in results if not r.get("not_scored")]
+        passes = sum(1 for r in scored if r["passed"])
+        passed = bool(scored) and passes * 2 > len(scored)
+        shown = next((r for r in scored if r["passed"] == passed), scored[-1] if scored else results[-1])
         totals = {key: round(sum(r[key] for r in results), 2)
                   for key in ("seconds", "tokens") if key in shown}
         rows.append({**shown, **totals, "passed": passed, "passes": passes, "attempts": repeat,
+                     "scored_attempts": len(scored), "not_scored": not scored,
                      "attempt_reasons": [r["reason"] for r in results]})
     return rows
 
 
 def summarize(rows):
-    scored = [r for r in rows if r["kind"] != "known_gap"]
+    counted = [r for r in rows if not r.get("not_scored")]
+    scored = [r for r in counted if r["kind"] != "known_gap"]
+    attempts = [reason for r in counted if r["kind"] != "safety"
+                for reason in r.get("attempt_reasons", [r.get("reason", "")])
+                if not reason.startswith("not scored")]
     return {
         "scored": len(scored),
         "passed": sum(1 for r in scored if r["passed"]),
         "failed": [r["id"] for r in scored if not r["passed"]],
         "safety_failures": [r["id"] for r in scored if r["kind"] == "safety" and not r["passed"]],
-        "known_gaps": {r["id"]: r["passed"] for r in rows if r["kind"] == "known_gap"},
+        "known_gaps": {r["id"]: r["passed"] for r in counted if r["kind"] == "known_gap"},
+        "not_scored": [r["id"] for r in rows if r.get("not_scored")],
+        # GR-POL-02: how often the validator rejected the model's SQL where a query should have run.
+        "rejected_attempts": sum(reason.startswith("error: SQLRejected") for reason in attempts),
+        "non_safety_attempts": len(attempts),
     }
 
 
 def compare_to_baseline(rows, baseline):
     before = baseline.get("cases", {})
+    counted = [r for r in rows if not r.get("not_scored")]
     return {
-        "regressions": [r["id"] for r in rows if before.get(r["id"]) is True and not r["passed"]],
-        "improvements": [r["id"] for r in rows if before.get(r["id"]) is False and r["passed"]],
-        "new": [r["id"] for r in rows if r["id"] not in before],
+        "regressions": [r["id"] for r in counted if before.get(r["id"]) is True and not r["passed"]],
+        "improvements": [r["id"] for r in counted if before.get(r["id"]) is False and r["passed"]],
+        "new": [r["id"] for r in counted if r["id"] not in before],
     }
 
 
 def exit_code(summary, diff, integrity_problems):
-    return 1 if summary["safety_failures"] or diff["regressions"] or integrity_problems else 0
+    """1: a safety failure, regression or data change. 2: incomplete (cases not scored). 0: clean."""
+    if summary["safety_failures"] or diff["regressions"] or integrity_problems:
+        return 1
+    return 2 if summary.get("not_scored") else 0
+
+
+def merged_baseline_cases(baseline, rows):
+    """The baseline's cases updated with this run's scored results; unscored cases keep their old value."""
+    return dict(sorted({**baseline.get("cases", {}),
+                        **{r["id"]: r["passed"] for r in rows if not r.get("not_scored")}}.items()))
+
+
+def baseline_path(model):
+    """Each model is compared only with its own accepted results."""
+    return HERE / "baselines" / (re.sub(r"[^A-Za-z0-9._-]+", "-", model).strip("-") + ".json")
 
 
 # ---- command line ----
@@ -73,7 +101,7 @@ def _parse(argv):
     p.add_argument("--repeat", type=int, default=1, help="ask each question this many times")
     p.add_argument("--case", action="append", default=[], help="run only this case ID (repeatable)")
     p.add_argument("--out", default=str(HERE / "reports"), help="folder for the JSON report")
-    p.add_argument("--baseline", default=str(HERE / "baseline.json"))
+    p.add_argument("--baseline", help="baseline file (default: evals/baselines/<model>.json)")
     p.add_argument("--update-baseline", action="store_true", help="accept this run as the baseline")
     p.add_argument("--today", default=DEFAULT_TODAY, help="date the workflow treats as today")
     p.add_argument("--max-tokens", type=int, default=200_000, help="stop calling the model after this")
@@ -90,7 +118,11 @@ def _print_table(rows, summary, diff, problems, tokens):
     print(f"passed {summary['passed']}/{summary['scored']} scored cases; tokens used {tokens}")
     print(f"safety failures: {summary['safety_failures'] or 'none'}")
     print(f"known gaps: {summary['known_gaps'] or 'none'}")
+    if summary["not_scored"]:
+        print(f"NOT SCORED (provider errors, run incomplete): {summary['not_scored']}")
     print(f"regressions: {diff['regressions'] or 'none'}; improvements: {diff['improvements'] or 'none'}")
+    print(f"validator rejections where a query should run: "
+          f"{summary['rejected_attempts']} of {summary['non_safety_attempts']} attempts")
     print(f"data integrity: {problems or 'unchanged'}")
 
 
@@ -137,10 +169,10 @@ def main(argv=None):
     rows = run_suite(cases, run_one, repeat=args.repeat)
     problems = check_integrity(before, integrity_snapshot())
 
-    baseline_path = Path(args.baseline)
-    baseline = json.loads(baseline_path.read_text()) if baseline_path.exists() else {"cases": {}}
+    model = getattr(llm, "model", "unknown-model")
+    bpath = Path(args.baseline) if args.baseline else baseline_path(model)
+    baseline = json.loads(bpath.read_text()) if bpath.exists() else {"cases": {}}
     summary, diff = summarize(rows), compare_to_baseline(rows, baseline)
-    model = os.getenv("OPENROUTER_MODEL") or DEFAULT_MODEL
     now = datetime.now(timezone.utc)
 
     out_dir = Path(args.out)
@@ -154,12 +186,15 @@ def main(argv=None):
     _print_table(rows, summary, diff, problems, used["tokens"])
     print(f"report: {report_path}")
 
-    if args.update_baseline:
-        merged = {**baseline.get("cases", {}), **{r["id"]: r["passed"] for r in rows}}
-        baseline_path.write_text(json.dumps(
+    print(f"model: {model}; baseline: {bpath}{'' if bpath.exists() else ' (none yet)'}")
+    if args.update_baseline and summary["not_scored"]:
+        print("incomplete run (cases not scored); baseline NOT updated", file=sys.stderr)
+    elif args.update_baseline:
+        bpath.parent.mkdir(parents=True, exist_ok=True)
+        bpath.write_text(json.dumps(
             {"model": model, "updated": now.isoformat(), "today": args.today,
-             "repeat": args.repeat, "cases": dict(sorted(merged.items()))}, indent=2) + "\n")
-        print(f"baseline updated: {baseline_path}")
+             "repeat": args.repeat, "cases": merged_baseline_cases(baseline, rows)}, indent=2) + "\n")
+        print(f"baseline updated: {bpath}")
         diff = {**diff, "regressions": []}
 
     return exit_code(summary, diff, problems)
