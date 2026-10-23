@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BI Agent RAG plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f2f5f7;--surface:#fff;--ink:#14202b;--muted:#566574;--line:#b9c5cd;--acc:#0e7c86;--acc-t:#d6eef0;--amb:#b97a0f;--amb-t:#f8ecd2;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1820;--surface:#172430;--ink:#e6edf2;--muted:#9bacb9;--line:#34475a;--acc:#4fc3cd;--acc-t:#143b40;--amb:#e3a73f;--amb-t:#3b2f12;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0f1820;--surface:#172430;--ink:#e6edf2;--muted:#9bacb9;--line:#34475a;--acc:#4fc3cd;--acc-t:#143b40;--amb:#e3a73f;--amb-t:#3b2f12;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:980px;margin:0 auto;padding:32px 20px 64px}
+h1,h2,h3{font-family:"Bricolage Grotesque",system-ui,sans-serif;line-height:1.15;margin:0}
+h1{font-size:clamp(2rem,5vw,3.1rem);max-width:18ch}
+h2{font-size:1.6rem;margin:56px 0 8px}
+h3{font-size:1.05rem;margin-bottom:6px}
+p{max-width:68ch;margin:8px 0}
+.lede{color:var(--muted);font-size:1.1rem}
+.loop,.flow{display:flex;flex-wrap:wrap;gap:8px;list-style:none;padding:0;margin:18px 0}
+.loop li,.flow li{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 12px;font-size:.92rem}
+.loop li:last-child{border-style:dashed}
+.flow li.llm{background:var(--amb-t);border-color:var(--amb)}
+.flow li.det{background:var(--acc-t);border-color:var(--acc)}
+.key{font-size:.88rem;color:var(--muted)}
+.explorer{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;margin-top:14px}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.tabs button{font:inherit;font-size:.88rem;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px 11px;cursor:pointer}
+.tabs button[aria-pressed="true"]{background:var(--acc);border-color:var(--acc);color:#fff}
+button:focus-visible{outline:3px solid var(--amb);outline-offset:2px}
+.svgwrap{overflow-x:auto}
+svg{min-width:700px;width:100%;height:auto;display:block}
+svg text{fill:var(--ink);font:12px system-ui,sans-serif}
+svg .sub{fill:var(--muted);font-size:10.5px}
+.n rect{fill:var(--surface);stroke:var(--line);stroke-width:1.5}
+.n.new rect{fill:var(--acc-t);stroke:var(--acc);stroke-width:2}
+.n.llm rect{stroke:var(--amb)}
+.e{stroke:var(--line);stroke-width:1.6;fill:none}
+.e.new{stroke:var(--acc);stroke-width:2.2}
+.ghost{opacity:.16}
+.ghost rect{stroke-dasharray:4 3}
+.band rect{fill:none;stroke:var(--line);stroke-dasharray:6 4}
+.cap{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-top:12px;font-size:.93rem}
+.cap p{margin:2px 0}
+.cap b{font-weight:600}
+.phases{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:16px;margin-top:18px}
+.ph{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px}
+.ph ol{margin:8px 0 10px;padding-left:0;list-style:none;font-size:.93rem}
+.ph li{padding:3px 0 3px 40px;position:relative}
+.ph li b{position:absolute;left:0;color:var(--acc);font-weight:600}
+.gate{font-size:.87rem;color:var(--muted);border-top:1px solid var(--line);padding-top:8px;margin:0}
+.rules{columns:2 300px;column-gap:28px;padding-left:20px}
+.rules li{margin-bottom:6px;break-inside:avoid}
+pre{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;overflow-x:auto;font-size:.86rem;line-height:1.5}
+code{font-family:ui-monospace,Menlo,Consolas,monospace}
+details{background:var(--surface);border:1px solid var(--line);border-radius:8px;margin:10px 0;padding:0 14px}
+summary{cursor:pointer;padding:12px 0;font-weight:600}
+summary:focus-visible{outline:3px solid var(--amb);outline-offset:2px}
+details[open] summary{border-bottom:1px solid var(--line);margin-bottom:10px}
+.step{padding-bottom:10px;font-size:.95rem}
+.step pre{margin:8px 0}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.88rem;margin:10px 0}
+th,td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{background:var(--surface)}
+</style>
+</head>
+<body>
+<main>
+<h1>BI Agent RAG: knowledge retrieval for business questions</h1>
+<p class="lede">Retrieve business knowledge (definitions, rules, validated SQL, dashboards, data-quality notes, incident reports) to help the agent understand questions; keep using SQL for every number.</p>
+<p class="key">Status: plan approved 24 October 2026; R1 done (knowledge pack and loader); R2 next. Companion to <a href="build-plan.html">build-plan.html</a>, <a href="guardrails.html">guardrails.html</a> and <a href="data-catalog.html">data-catalog.html</a>.</p>
+
+<h2>Principle</h2>
+<p>RAG retrieves <b>knowledge</b>: what "active customer" means, which revenue definition is authoritative, the fiscal calendar, proven query patterns, what happened to tents in March 2026. SQL retrieves <b>data</b>. Vector search never replaces the query engine, and no number in an answer comes from a document.</p>
+
+<h2>Current architecture (inspected 24 October 2026)</h2>
+<ul>
+<li>One fixed LangGraph workflow (<code>bi/service.py</code>): rewrite, write SQL (second opinion on declines), validate, execute, explain, ground, with one bounded repair. The model is called in three places only; it never chooses tools.</li>
+<li>Schema knowledge is structured, not embedded: <code>catalog/*.toml</code> plus database introspection, filtered per role, and the whole role catalog goes into every SQL prompt (about 4,700 tokens).</li>
+<li>Business rules exist in part: 6 metrics, 2 enforced metric rules, SQL hints; none versioned or owned.</li>
+<li>LLM: one OpenAI-compatible client, now pointed at local Ollama (qwen2.5-coder:7b). Storage: Postgres 16 (retail, appdb, analytics). Tests: pytest, Streamlit AppTest, real-model evaluation with per-model baselines.</li>
+</ul>
+
+<h2>Decisions (your approval, 24 October 2026)</h2>
+<div class="tablewrap"><table><thead><tr><th>Decision</th><th>Choice</th><th>Why</th></tr></thead><tbody>
+<tr><td>Embeddings</td><td>Ollama, <code>nomic-embed-text</code> (768 dimensions), behind an <code>Embedder</code> interface</td><td>Free, local, no new Python dependency; a hosted model can replace it for AWS</td></tr>
+<tr><td>Vector store</td><td>pgvector in the existing Postgres (image <code>pgvector/pgvector:pg16</code>)</td><td>No new service; transactional with metadata; supported on AWS RDS</td></tr>
+<tr><td>Index location</td><td>Schema <code>knowledge</code> in <code>appdb</code></td><td>Knowledge belongs to the app; BI logins never see it</td></tr>
+<tr><td>Source of truth</td><td>Markdown files with a TOML header in <code>backend/knowledge/</code>, reviewed in git</td><td>The index is derived and can always be rebuilt</td></tr>
+<tr><td>Schema retrieval</td><td>Stays structured; one short table card per table is embedded for ranking only</td><td>Exact columns, types and keys still come from the catalog</td></tr>
+<tr><td>Keyword search, reranking</td><td>Postgres full-text search later, only if the evaluation shows a gain; no reranker at first</td><td>Measure before adding complexity</td></tr>
+<tr><td>Business use case</td><td>Trailhead Outfitters knowledge pack; fiscal year February to January (FY2025 = 1 Feb 2025 to 31 Jan 2026)</td><td>Fits the generated data exactly, so every document can be tested against it</td></tr>
+</tbody></table></div>
+
+<h2>Knowledge pack (about 38 documents)</h2>
+<ul>
+<li><b>Metrics:</b> revenue (authoritative, Sales Analytics) and a conflicting Finance view, net revenue, average order value, order count, units sold, return rate, active customer, repeat-purchase rate, conversion rate, stock-out week, gross margin.</li>
+<li><b>Rules (versioned):</b> exclude cancelled orders (v2, superseding a v1 kept on purpose), returns and refunds, fiscal calendar, reporting periods, regions for orders, current loyalty tier.</li>
+<li><b>Validated SQL examples:</b> monthly trend, year over year, top products, revenue by region, average order value, repeat customers, conversion by campaign channel, stock-out weeks, fiscal-year revenue, revenue by quarter; each executed by a test.</li>
+<li><b>Dashboards:</b> Executive Sales, Supply Chain Health, Customer Loyalty.</li>
+<li><b>Data quality and ownership:</b> owners and refresh, known issues, deprecated or non-business objects.</li>
+<li><b>Narrative documents:</b> the Q1 2026 tent supply incident, the Spring Trail Sale 2025 review, the Ridgeline 300 Headlamp recall.</li>
+</ul>
+
+<h2>Data model (appdb, schema knowledge)</h2>
+<p><code>documents</code> (id from the file path, type, title, source, domain, owner, version, effective date, status, access groups, content hash, updated at); <code>chunks</code> (id, document, position, content, hash, token count, <code>vector(768)</code> embedding, embedding model); <code>ingestion_runs</code> (counts and errors). Unchanged hashes are not re-embedded; a changed document replaces its chunks in one transaction; deleted files leave the index; superseded versions are never retrieved; duplicate content is refused; mixing embedding models is refused.</p>
+
+<h2>Milestones</h2>
+<div class="tablewrap"><table><thead><tr><th></th><th>Milestone</th><th>Main checks</th><th>Status</th></tr></thead><tbody>
+<tr><td>R1</td><td>Knowledge pack and strict loader</td><td>Metadata valid; one authoritative definition per metric; superseded documents point to a successor; every SQL example passes the validator and runs on retail_test; facts agree with the generated data</td><td><b>Done (seen):</b> 39 documents in <code>backend/knowledge/</code> (12 metrics including a deliberately conflicting Finance view of revenue, 7 rules including a superseded v1, 10 validated SQL examples, 3 dashboards, 4 data-quality notes, 3 narrative documents); strict loader <code>app/knowledge/documents.py</code>; knowledge access must match data access (a document about <code>orders</code> cannot be shared with limited users); 25 tests failed first against an empty stub, then passed; every SQL example passes the validator and metric rules and runs on retail_test, and three match an independent recount; incident, recall, promotion, store-opening, cut-off and fiscal-calendar facts are checked against the generator; backend 795 passed</td></tr>
+<tr><td>R2</td><td>pgvector and the knowledge schema</td><td>Image switch with data kept (backup first); tables, indexes, grants; existing suites unchanged</td><td></td></tr>
+<tr><td>R3</td><td>Embedder: Ollama and a deterministic fake</td><td>Dimensions, failures, model recorded</td><td></td></tr>
+<tr><td>R4</td><td>Ingestion pipeline and command</td><td>Chunking per type, incremental updates, deletions, duplicates, run status</td><td></td></tr>
+<tr><td>R5</td><td>Retrieval and retrieval evaluation</td><td>Access filter in SQL; Recall@K, MRR, latency on about 30 labelled questions; hybrid only if better</td><td></td></tr>
+<tr><td>R6</td><td>Integration into the workflow</td><td>Knowledge questions answered with sources and no SQL; data questions get relevant rules, examples and only the relevant tables; retrieved text fenced as data; low-confidence fallback to today's full catalog</td><td></td></tr>
+<tr><td>R7</td><td>Retail evaluation with and without RAG (absorbs M29d)</td><td>Reference-query accuracy, access control</td><td></td></tr>
+<tr><td>R8</td><td>Performance and documentation</td><td>Latency, prompt and index size; README, CLAUDE.md</td><td></td></tr>
+</tbody></table></div>
+
+<h2>Risks</h2>
+<ul><li>The local 7B model limits accuracy; R7 measures how much RAG helps and makes a stronger model a one-setting comparison.</li>
+<li>Two embedding services over time (local now, hosted on AWS); the interface and the "never mix models" rule keep this safe.</li>
+<li>The database image change; same Postgres 16 and a backup first.</li>
+<li>Prompt injection through documents; retrieved text is fenced and treated as data.</li></ul>
+</main>
+</body>
+</html>

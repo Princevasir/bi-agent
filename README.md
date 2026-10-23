@@ -84,6 +84,9 @@ The full list of what the project offers today. Keep it current as features land
 - Planted business stories to discover, such as a late supplier delivery that empties tent stock and cuts March 2026 online revenue, a product recall, a promotion lift and a new store.
 - Access enforced by the database down to the column: analysts cannot read customer names, email, phone, street address or salaries; managers can; limited users see only geography and products.
 
+### Business knowledge (RAG, in progress)
+- A knowledge pack for Trailhead Outfitters in `backend/knowledge/`: metric definitions with owners and versions (including one conflicting definition and how it is resolved), versioned business rules such as the February-to-January fiscal year, validated SQL examples that the tests execute, dashboard documentation, data-quality notes and incident reports. Retrieval and use by the agent are being added step by step (see `docs/rag.html`).
+
 ### Testing and quality
 - Backend and frontend test suites; tests use a scripted model, so they are free and repeatable.
 - An evaluation dataset of 23 questions with known answers, including follow-ups, an empty result, four safety probes and three requests that should be declined, with a scoring harness that checks the real workflow's results rather than its SQL text. A runner asks the real model every question, can repeat each one, compares with a saved baseline, and fails on any safety problem or regression.
