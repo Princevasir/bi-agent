@@ -45,7 +45,7 @@ services:
     environment:
       BACKEND_URL: http://backend:8000
   db:
-    image: postgres:16
+    image: pgvector/pgvector:pg16-trixie   # Postgres 16 + pgvector, same Debian 13 and glibc as postgres:16
     environment:
       POSTGRES_DB: analytics
       POSTGRES_USER: admin
