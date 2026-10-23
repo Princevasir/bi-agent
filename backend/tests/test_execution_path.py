@@ -71,8 +71,9 @@ def test_workflow_executes_only_validated_sql(monkeypatch):
 def test_only_known_modules_talk_to_postgres():
     users = sorted(p.relative_to(APP_DIR).as_posix() for p in APP_DIR.rglob("*.py")
                    if "import psycopg" in p.read_text())
-    # db.py: the read-only BI logins; appdb.py and audit.py: the app's own users and audit tables.
-    assert users == ["appdb.py", "audit.py", "db.py"]
+    # db.py: the read-only BI logins; appdb.py and audit.py: the app's own users and audit tables;
+    # knowledge/store.py (RAG R4): the knowledge index, through its own knowledge_writer login.
+    assert users == ["appdb.py", "audit.py", "db.py", "knowledge/store.py"]
 
 
 # ---- /ask/sql validates like /ask -----------------------------------------
