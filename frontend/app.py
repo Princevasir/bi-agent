@@ -93,6 +93,9 @@ def show_answer(msg, index):
         with st.expander("SQL"):
             st.code(msg["sql"], language="sql")
         return
+    if not msg.get("rows") and not msg.get("sql"):     # an answer about the data with nothing to list
+        st.info(msg["answer"], icon="ℹ️")
+        return
 
     st.markdown(f"##### {plain(msg['answer'])}")
     if msg.get("interpreted_as") and msg["interpreted_as"] != msg.get("question"):
@@ -108,7 +111,7 @@ def show_answer(msg, index):
     choice_key = f"chart-type-{index}"
     kind = st.session_state.get(choice_key) or spec.get("type")
     fig = None if card else build_figure(spec, msg["columns"], msg["rows"], kind=kind)
-    labels = (["📊 Chart"] if fig else []) + ["🧾 Table", "🧩 SQL"]
+    labels = (["📊 Chart"] if fig else []) + ["🧾 Table"] + (["🧩 SQL"] if msg.get("sql") else [])
     tabs = dict(zip(labels, st.tabs(labels)))
     if fig:
         with tabs["📊 Chart"]:
@@ -123,8 +126,9 @@ def show_answer(msg, index):
         st.dataframe(df, hide_index=True, width="stretch")
         if msg.get("truncated"):
             st.caption(f"Showing the first {len(msg['rows'])} rows.")
-    with tabs["🧩 SQL"]:
-        st.code(msg["sql"], language="sql")
+    if "🧩 SQL" in tabs:
+        with tabs["🧩 SQL"]:
+            st.code(msg["sql"], language="sql")
 
 
 def handle(question):
@@ -151,6 +155,66 @@ def handle(question):
     st.session_state.messages.append({"role": "assistant", **result})
 
 
+# ---- Data catalog page (M29c) ----------------------------------------------------------------------
+
+def ask_about(table):
+    st.session_state.pending = f"Describe the {table} table"
+    st.session_state.view = "Chat"
+
+
+def _matches(table, text):
+    if not text:
+        return True
+    text = text.lower()
+    haystack = [table["name"], table["description"], table["domain"]] + \
+        [c["name"] + " " + c["description"] for c in table["columns"]]
+    return any(text in h.lower() for h in haystack)
+
+
+def catalog_page():
+    st.markdown("## Data catalog")
+    st.caption("The tables and columns your role can query, with their meaning, keys and relationships. "
+               "Columns with personal data are not shown.")
+    try:
+        data = client.get_json("/catalog", timeout=30, token=st.session_state.token)
+    except BackendError as e:
+        if e.status_code == 401:
+            reset(keep_user=False)
+            st.warning("Your session expired. Please sign in again.", icon="🔑")
+            return
+        show_status(status_for(e))
+        return
+    tables = data["tables"]
+    areas = ["All business areas"] + list(dict.fromkeys(t["domain"] for t in tables))
+    left, right = st.columns([2, 1])
+    search = left.text_input("Search tables and columns", key="catalog-search",
+                             placeholder="for example revenue, customer, status")
+    area = right.selectbox("Business area", areas, key="catalog-area")
+    shown = [t for t in tables if (area == areas[0] or t["domain"] == area) and _matches(t, search)]
+    st.caption(f"{len(shown)} of {len(tables)} tables")
+    for t in shown:
+        with st.expander(f"{t['name']} · {t['domain']} · {t['description']}"):
+            facts = [f"**Grain:** {t['grain']}" if t["grain"] else "",
+                     f"**Primary key:** `{', '.join(t['primary_key'])}`" if t["primary_key"] else "",
+                     f"**About {t['rows']:,} rows**" if t.get("rows") else ""]
+            st.markdown("  \n".join(f for f in facts if f))
+            if t["foreign_keys"]:
+                st.markdown("**Points to:** " + ", ".join(f"`{f['column']}` → {f['table']}" for f in t["foreign_keys"]))
+            if t["referenced_by"]:
+                st.markdown("**Referenced by:** " + ", ".join(f"{r['table']}.`{r['column']}`" for r in t["referenced_by"]))
+            for c in t["caveats"]:
+                st.markdown(f"⚠️ {plain(c)}")
+            rows = [[c["name"], c["type"], "PK" if c["primary_key"] else ("FK" if c.get("references") else ""),
+                     c["description"] + (f" Values: {', '.join(c['values'])}." if c.get("values") else "")]
+                    for c in t["columns"]]
+            st.dataframe(pd.DataFrame(rows, columns=["Column", "Type", "Key", "Meaning"]), hide_index=True)
+            st.button(f"Ask about {t['name']}", key=f"ask-{t['name']}", on_click=ask_about, args=(t["name"],))
+    if data.get("metrics"):
+        with st.expander("Governed metrics"):
+            st.dataframe(pd.DataFrame([[m["name"], m["definition"], m["description"]] for m in data["metrics"]],
+                                      columns=["Metric", "Definition", "Meaning"]), hide_index=True)
+
+
 # ---- page ------------------------------------------------------------------------------------
 
 if not st.session_state.token:
@@ -167,10 +231,15 @@ with st.sidebar:
     if right.button("Sign out", key="sign-out", width="stretch"):
         reset(keep_user=False)
         st.rerun()
+    st.radio("View", ["Chat", "Data catalog"], key="view", horizontal=True)
     st.divider()
     st.markdown("**Try asking**")
     for i, q in enumerate(examples()):
         st.button(q, key=f"side-example-{i}", on_click=ask_later, args=(q,), width="stretch")
+
+if st.session_state.get("view") == "Data catalog":
+    catalog_page()
+    st.stop()
 
 st.markdown("## Ask your data")
 st.markdown('<p class="brand-sub">Answers from your company data. Every query is checked before it runs.</p>',

@@ -64,6 +64,8 @@ The full list of what the project offers today. Keep it current as features land
 - Sign-in form, sign-out button and session-expired handling in the UI; the token never reaches the browser.
 
 ### Interface
+- Ask about the data itself in the chat ("What tables do I have access to?", "Describe the orders table", "What does line_total mean?", "Which metrics are defined?"): answered instantly from the data catalog for your role, without the model.
+- A Data catalog view in the sidebar: search and filter the tables your role can query, with columns, types, keys, relationships, caveats and governed metrics, and ask about any table in one click.
 - A themed chat with a welcome screen of clickable example questions for your role, and the same examples in the sidebar.
 - Each answer as a headline with tabs for an interactive Plotly chart, the table and the SQL; single numbers get a big-number card; monthly results are labelled "Aug 2026" rather than timestamps.
 - Clear, distinct notes for declined questions, empty results, queries that were too broad or rejected, access denied, rate limits, timeouts and an unavailable model.
@@ -167,6 +169,7 @@ All routes except the first four need `Authorization: Bearer <token>` from `/aut
 | POST | `/ask/sql` | Generate and validate SQL for a question without running it (422 if the validator rejects it) |
 | GET | `/conversations/{id}` | Turns of one of your own conversations |
 | GET | `/schema` | Tables and columns your role can see |
+| GET | `/catalog` | The data catalog your role can see: tables, columns, keys, relationships, descriptions, metrics |
 | GET | `/db/ping` | Database check as your role |
 | POST | `/chat` | Plain LLM reply (no data access) |
 

@@ -256,3 +256,84 @@ def test_a_request_that_does_not_fit_shows_why(backend):
     at = signed_in_app()
     at.chat_input[0].set_value("Revenue by month as a pie chart").run()
     assert any(note in str(i.value) for i in at.info)
+
+
+# ---- M29c: answers about the data and the Data catalog page ---------------------------------------------
+
+CATALOG = {"source": "retail", "metrics": [{"name": "revenue", "definition": "SUM(order_items.line_total)",
+                                             "description": "Money paid for completed orders."}],
+           "tables": [
+               {"name": "orders", "domain": "Sales", "description": "Customer orders.", "grain": "One row per order.",
+                "caveats": ["Revenue counts completed orders only."], "primary_key": ["order_id"],
+                "foreign_keys": [{"column": "customer_id", "table": "customers", "references": "customer_id"}],
+                "referenced_by": [{"table": "order_items", "column": "order_id"}], "rows": 281682,
+                "columns": [{"name": "order_id", "type": "integer", "nullable": False, "primary_key": True,
+                             "references": None, "description": "Order key.", "values": [], "unit": "", "pii": False}]},
+               {"name": "regions", "domain": "Geography", "description": "Sales regions.", "grain": "One row per region.",
+                "caveats": [], "primary_key": ["region_id"], "foreign_keys": [], "referenced_by": [], "rows": 3,
+                "columns": [{"name": "region_id", "type": "integer", "nullable": False, "primary_key": True,
+                             "references": None, "description": "Region key.", "values": [], "unit": "", "pii": False}]},
+           ]}
+TABLE_LIST = {**REGIONS, "sql": "", "chart": None, "answer_source": "catalog",
+              "columns": ["table", "business_area", "description", "rows"],
+              "rows": [["regions", "Geography", "Sales regions.", 3], ["orders", "Sales", "Customer orders.", 281682]],
+              "answer": "You can query 2 tables in 2 business areas."}
+
+
+@pytest.fixture
+def with_catalog(backend, monkeypatch):
+    calls = []
+
+    def get_json(path, timeout=5.0, token=None):
+        calls.append((path, token))
+        return CATALOG
+
+    monkeypatch.setattr(client, "get_json", get_json)
+    return calls
+
+
+def test_a_catalog_answer_shows_the_table_and_no_sql_tab(backend):
+    backend.result = TABLE_LIST
+    at = signed_in_app()
+    at.chat_input[0].set_value("Show me the list of tables").run()
+    assert [t.label for t in at.tabs] == ["🧾 Table"]
+    assert "You can query 2 tables" in all_text(at)
+
+
+def test_an_answer_with_no_rows_and_no_sql_is_a_note(backend):
+    backend.result = {**TABLE_LIST, "columns": [], "rows": [],
+                      "answer": "There is no table called orders that you can access."}
+    at = signed_in_app()
+    at.chat_input[0].set_value("Describe the orders table").run()
+    assert any("no table called orders" in str(i.value) for i in at.info) and len(at.tabs) == 0
+
+
+def test_the_data_catalog_page_lists_the_tables(with_catalog):
+    at = signed_in_app()
+    at.sidebar.radio(key="view").set_value("Data catalog").run()
+    assert not at.exception
+    assert with_catalog == [("/catalog", "tok")]
+    titles = [e.label for e in at.expander]
+    assert any("orders" in t for t in titles) and any("regions" in t for t in titles)
+    assert any("Customer orders." in t for t in titles)                 # the description is in the title
+    assert "Revenue counts completed orders only." in all_text(at)
+
+
+def test_the_catalog_can_be_searched_and_filtered(with_catalog):
+    at = signed_in_app()
+    at.sidebar.radio(key="view").set_value("Data catalog").run()
+    tables = lambda: [e.label for e in at.expander if e.label != "Governed metrics"]
+    at.text_input(key="catalog-search").input("region").run()
+    assert len(tables()) == 1 and tables()[0].startswith("regions")
+    at.text_input(key="catalog-search").input("").run()
+    at.selectbox(key="catalog-area").set_value("Sales").run()
+    assert len(tables()) == 1 and tables()[0].startswith("orders")
+
+
+def test_ask_about_a_table_switches_to_the_chat(with_catalog, backend):
+    backend.result = TABLE_LIST
+    at = signed_in_app()
+    at.sidebar.radio(key="view").set_value("Data catalog").run()
+    at.button(key="ask-orders").click().run()
+    assert at.session_state["view"] == "Chat"
+    assert backend.calls[-1][1]["message"] == "Describe the orders table"

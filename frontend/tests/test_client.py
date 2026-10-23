@@ -94,3 +94,26 @@ def test_login_posts_credentials_and_returns_data(monkeypatch):
     assert fake.url.endswith("/auth/login")
     assert fake.kwargs["json"] == {"username": "alice", "password": "secret"}
     assert "Authorization" not in fake.kwargs["headers"]
+
+
+def test_get_json_sends_the_token_and_reports_status(monkeypatch):
+    seen = {}
+
+    class Response:
+        status_code = 401
+
+        def raise_for_status(self):
+            raise requests.HTTPError()
+
+        def json(self):
+            return {"detail": "Not authenticated"}
+
+    def fake_get(url, headers=None, timeout=None):
+        seen["headers"] = headers
+        return Response()
+
+    monkeypatch.setattr(client.requests, "get", fake_get)
+    with pytest.raises(client.BackendError) as e:
+        client.get_json("/catalog", token="tok")
+    assert seen["headers"]["Authorization"] == "Bearer tok"
+    assert e.value.status_code == 401 and str(e.value) == "Not authenticated"

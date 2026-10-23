@@ -18,13 +18,12 @@ def _detail(r):
     except (ValueError, KeyError, TypeError):
         return f"Backend returned status {r.status_code}."
 
-def get_json(path: str, timeout: float = 5.0) -> dict:
+def get_json(path: str, timeout: float = 5.0, token=None) -> dict:
+    headers = {"X-Request-ID": str(uuid.uuid4())}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     try:
-        r = requests.get(
-        f"{BACKEND_URL}{path}",
-        headers={"X-Request-ID": str(uuid.uuid4())},
-        timeout=timeout,
-        )
+        r = requests.get(f"{BACKEND_URL}{path}", headers=headers, timeout=timeout)
         r.raise_for_status()
         return r.json()
     except requests.Timeout as e:
@@ -32,7 +31,7 @@ def get_json(path: str, timeout: float = 5.0) -> dict:
     except requests.ConnectionError as e:
         raise BackendError("Cannot reach the backend. Is it running?") from e
     except requests.HTTPError as e:
-        raise BackendError(f"Backend returned status {r.status_code}.") from e
+        raise BackendError(_detail(r), r.status_code) from e
     except ValueError as e:
         raise BackendError("Backend returned invalid JSON.") from e
 

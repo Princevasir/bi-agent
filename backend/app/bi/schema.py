@@ -99,5 +99,46 @@ def hints_text():
     return "\n".join(f"- {h}" for h in catalog.get().hints)
 
 
+@lru_cache(maxsize=16)
+def _catalog_for(source, role):
+    if not uses_catalog():
+        return {t: {"name": t, "domain": "Sample data", "description": "", "grain": "", "caveats": [],
+                    "primary_key": [], "foreign_keys": [], "referenced_by": [], "rows": 0,
+                    "columns": [{"name": c["column"], "type": c["type"], "nullable": True, "primary_key": False,
+                                 "references": None, "description": "", "values": [], "unit": "", "pii": False}
+                                for c in cols]}
+                for t, cols in get_schema(role).items()}
+    allowed, denied = set(tables_for(role)), denied_columns(role)
+    full = catalog.merged(catalog.get(), _introspect(role))
+    out = {}
+    for name, t in full.items():
+        if name not in allowed:
+            continue
+        out[name] = {**t,
+                     "columns": [c for c in t["columns"] if (name, c["name"]) not in denied],
+                     "foreign_keys": [f for f in t["foreign_keys"] if f["table"] in allowed],
+                     "referenced_by": [r for r in t["referenced_by"] if r["table"] in allowed]}
+    return out
+
+
+def catalog_for(role="analyst"):
+    """The catalog the role may see (M29c): its tables, readable columns, relationships among them."""
+    return _catalog_for(data_source(), role)
+
+
+def metrics_for(role="analyst"):
+    """Governed metrics the role can compute, as name, description and definition."""
+    if uses_catalog():
+        allowed = set(tables_for(role))
+        return [{"name": m.name, "description": m.description,
+                 "definition": m.expression + (f" WHERE {' AND '.join(m.filters)}" if m.filters else "")}
+                for m in catalog.get().metrics.values() if set(m.tables) <= allowed]
+    if "orders" not in tables_for(role):
+        return []
+    return [{"name": m.name, "description": m.description, "definition": f"{m.expression} WHERE {m.base_where}"}
+            for m in METRICS.values()]
+
+
 def clear_cache():
     _catalog_text.cache_clear()
+    _catalog_for.cache_clear()

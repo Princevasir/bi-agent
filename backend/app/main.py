@@ -11,12 +11,13 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app import audit
-from app.access import AccessError, denied_columns, metric_rules, tables_for
+from app.access import AccessError, data_source, denied_columns, metric_rules, tables_for
+from app.bi.catalog_answers import answer as catalog_answer, catalog_question
 from app.appdb import User, get_user
 from app.appdb import ping as appdb_ping
 from app.auth import AuthConfigError, authenticate, create_token, current_user
 from app.bi.conversation import MAX_STORED_ROWS, ConversationStore, Turn
-from app.bi.schema import get_schema
+from app.bi.schema import catalog_for, get_schema, metrics_for
 from app.bi.service import answer_question
 from app.bi.chart import NAMES as CHART_NAMES, apply_request, build_chart_spec, is_chart_only, requested_chart
 from app.bi.sql_guard import SQLRejected, validate_sql
@@ -268,6 +269,9 @@ def ask(body: AskRequest, request: Request,
             raise HTTPException(status_code=404, detail="Conversation not found.")
     if is_chart_only(body.message):
         return redraw(body.message, history, cid, user, request)
+    intent = catalog_question(body.message, None)      # by wording only; no database call yet
+    if intent:
+        return about_the_data(body.message, intent, history, cid, user, request)
     out = answer_question(body.message, make_generate(llm, request),
                           date.today(), history, role=user.role)
     store.add(conv_key(user, cid), Turn(
@@ -283,6 +287,25 @@ def ask(body: AskRequest, request: Request,
                 row_count=len(out["rows"]), truncated=out["truncated"],
                 answer_source=out["answer_source"], sql_repairs=out["sql_repairs"])
     return {**out, "conversation_id": cid}
+
+
+def about_the_data(message, intent, history, cid, user, request):
+    """M29c: questions about the data are answered from the role's catalog: no model, no SQL."""
+    out = {"question": message, "interpreted_as": message,
+           **catalog_answer(intent, catalog_for(user.role), metrics_for(user.role))}
+    store.add(conv_key(user, cid), Turn(question=message, sql="", columns=out["columns"],
+                                        rows=out["rows"][:MAX_STORED_ROWS], answer=out["answer"]))
+    audit_event(request, "catalog_question", 200, conversation_id=cid, question=message,
+                intent=intent[0], subject=intent[1], row_count=len(out["rows"]))
+    return {**out, "conversation_id": cid}
+
+
+@app.get("/catalog")
+def get_catalog(request: Request, user: User = Depends(signed_in)):
+    """The catalog the user's role may see, for the Data catalog page."""
+    audit_event(request, "catalog_view", 200)
+    return {"source": data_source(), "tables": list(catalog_for(user.role).values()),
+            "metrics": metrics_for(user.role)}
 
 
 NOTHING_TO_REDRAW = "There is no earlier result to redraw yet. Ask a question about your data first."
