@@ -20,7 +20,7 @@ from app.bi.schema import get_schema
 from app.bi.service import answer_question
 from app.bi.sql_guard import SQLRejected, validate_sql
 from app.bi.text_to_sql import generate_sql, is_no_query
-from app.db import DBError, DBTimeoutError, TrustedSQL, run_readonly
+from app.db import DBError, DBTimeoutError, ResultTooLargeError, TrustedSQL, run_readonly
 from app.llm import get_llm
 from app.llm.base import (
     LLMConfigError, LLMError, LLMRateLimitError, LLMService, LLMTimeoutError,
@@ -92,6 +92,14 @@ async def llm_error_handler(request: Request, exc: LLMError):
                            _rid(request), type(exc).__name__, exc)
             audit_event(request, "llm_error", status, error=type(exc).__name__)
             return JSONResponse(status_code=status, content={"detail": message})
+
+
+@app.exception_handler(ResultTooLargeError)
+async def result_too_large_handler(request: Request, exc: ResultTooLargeError):
+    logger.warning("result_too_large", extra={"request_id": _rid(request)})
+    audit_event(request, "result_too_large", 422)
+    return JSONResponse(status_code=422,
+                        content={"detail": "The result is too large to show. Try a narrower question."})
 
 
 @app.exception_handler(DBError)

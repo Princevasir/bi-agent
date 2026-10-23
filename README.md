@@ -48,7 +48,7 @@ The full list of what the project offers today. Keep it current as features land
 
 ### Safety and access control
 - Every generated query passes a validator before it runs: exactly one `SELECT` (or a `UNION`, `INTERSECT` or `EXCEPT` of them), no write hidden anywhere in it, allowed tables only, no schema-qualified names, only functions from an approved list (so nothing that runs SQL from a string, reads server settings, or builds huge values), no `SELECT INTO` or locking.
-- Queries run through a read-only database login with a 5-second timeout and a 200-row cap.
+- Queries run through a read-only database login with a 5-second timeout and a 200-row cap. Rows are read in small batches, so a query matching millions of rows never loads them into the backend.
 - Two roles: `analyst` (orders and regions) and `limited` (regions only), each with its own database login, so the database refuses what the role may not read even if the validator were bypassed.
 - The model only sees the tables the user's role may see.
 - There is one way into the database for questions: the code refuses to run any SQL that did not come out of the validator, and a test fails if a new route skips sign-in.
@@ -176,6 +176,9 @@ Set in `.env`; defaults come from `docker-compose.yml`.
 | `LLM_TIMEOUT_SECONDS` | 20 | Per LLM call |
 | `LLM_MAX_OUTPUT_TOKENS` | 512 | Per LLM call |
 | `LLM_TOKEN_BUDGET` | 50000 | Total tokens per backend process before LLM calls are refused |
+| `SQL_MAX_ROWS` | 200 | Rows returned per query; more are never read from the database |
+| `SQL_MAX_RESULT_BYTES` | 1000000 | Approximate size of the rows returned per query; a single larger row is refused |
+| `SQL_TIMEOUT_MS` | 5000 | Statement timeout per query |
 | `LOG_LEVEL` | `INFO` | Backend log level |
 | `LOG_FORMAT` | `json` | `json` (one JSON object per line) or `text` for easier local reading |
 
