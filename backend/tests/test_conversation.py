@@ -136,7 +136,9 @@ def test_ask_response_includes_a_bar_chart_spec():
     use(RoutedLLM(SEPTEMBER))
     r = ask("What was revenue by region in September 2026?")
     assert r.status_code == 200
-    assert r.json()["chart"] == {"type": "bar", "x": "region", "y": "revenue"}
+    chart = r.json()["chart"]   # F1b added "options" (the chart types that fit)
+    assert {k: chart[k] for k in ("type", "x", "y")} == {"type": "bar", "x": "region", "y": "revenue"}
+    assert chart["options"][0] == "bar"
 
 
 TOTAL = (

@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
 
 import client
-from charts import build_figure
+from charts import LABELS, build_figure
 from client import BackendError
 from presentation import is_declined, is_no_data, pretty_label, single_value, status_for
 
@@ -101,11 +101,18 @@ def show_answer(msg, index):
     if card:
         st.metric(card[0], card[1], border=True)
 
-    fig = None if card else build_figure(msg.get("chart"), msg["columns"], msg["rows"])
+    spec = msg.get("chart") or {}
+    offered = [o for o in spec.get("options") or [spec.get("type")] if o in LABELS]
+    choice_key = f"chart-type-{index}"
+    kind = st.session_state.get(choice_key) or spec.get("type")
+    fig = None if card else build_figure(spec, msg["columns"], msg["rows"], kind=kind)
     labels = (["📊 Chart"] if fig else []) + ["🧾 Table", "🧩 SQL"]
     tabs = dict(zip(labels, st.tabs(labels)))
     if fig:
         with tabs["📊 Chart"]:
+            if len(offered) > 1:   # only the types the backend says fit this result
+                st.selectbox("Chart type", offered, index=offered.index(kind), key=choice_key,
+                             format_func=LABELS.get, width=220)
             st.plotly_chart(fig, width="stretch", key=f"chart-{index}",
                             config={"displaylogo": False})
             st.session_state._charts_drawn += 1   # lets the tests check what was redrawn, and when

@@ -14,7 +14,8 @@ REGIONS = {
     "sql": "SELECT r.name AS region_name, SUM(o.amount) AS revenue FROM orders o JOIN regions r ON r.id = o.region_id GROUP BY 1",
     "columns": ["region_name", "revenue"], "rows": [["North", 270], ["South", 300], ["West", 240]],
     "truncated": False, "answer": "South led with 300.", "answer_source": "model",
-    "chart": {"type": "bar", "x": "region_name", "y": "revenue"}, "conversation_id": "c-1",
+    "chart": {"type": "bar", "options": ["bar", "pie", "donut", "treemap"], "x": "region_name", "y": "revenue"},
+    "conversation_id": "c-1",
 }
 SINGLE = {**REGIONS, "sql": "SELECT SUM(amount) AS revenue FROM orders", "columns": ["revenue"],
           "rows": [[810.0]], "answer": "Revenue was 810.", "chart": None}
@@ -203,3 +204,35 @@ def test_the_product_is_called_bi_agent_not_the_demo_company(backend):
     for at in (AppTest.from_file(str(FRONTEND / "app.py"), default_timeout=20).run(), signed_in_app()):
         text = all_text(at) + " ".join(str(e.value) for e in at.sidebar.markdown)
         assert "BI Agent" in text and "Trailhead" not in text
+
+
+
+# ---- F1b: chart-type selector ---------------------------------------------------------------------
+
+def chart_json(at):
+    return at.get("plotly_chart")[0].proto.spec
+
+
+def test_selector_offers_only_the_chart_types_that_fit(backend):
+    at = signed_in_app()
+    at.chat_input[0].set_value("Revenue by region in September 2026?").run()
+    [selector] = at.selectbox
+    assert selector.label == "Chart type"
+    assert selector.options == ["Bar", "Pie", "Donut", "Treemap"]
+    assert selector.value == "bar" and '"type":"bar"' in chart_json(at)
+
+
+def test_switching_the_chart_type_redraws_it(backend):
+    at = signed_in_app()
+    at.chat_input[0].set_value("Revenue by region in September 2026?").run()
+    at.selectbox[0].set_value("pie").run()
+    assert not at.exception
+    assert '"type":"pie"' in chart_json(at)
+
+
+def test_no_selector_when_only_one_chart_fits(backend):
+    backend.result = {**REGIONS, "columns": ["price", "quantity"], "rows": [[1.0, 2.0], [2.0, 3.0], [3.0, 5.0]],
+                      "chart": {"type": "scatter", "options": ["scatter"], "x": "price", "y": "quantity"}}
+    at = signed_in_app()
+    at.chat_input[0].set_value("Price against quantity").run()
+    assert len(at.selectbox) == 0 and len(at.get("plotly_chart")) == 1

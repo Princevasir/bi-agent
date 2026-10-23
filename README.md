@@ -43,7 +43,7 @@ The full list of what the project offers today. Keep it current as features land
 - A short answer sentence, the SQL that produced it, and the result table.
 - Every number in the model's sentence is checked against the result; if any number is not in the data, a plain answer built from the rows is shown instead.
 - A fixed "no matching data" message for empty results, and a note when results were cut off.
-- Automatic charts: a line chart for dates or months, a bar chart for categories, none when it wouldn't help. Chosen by fixed rules, never by the model.
+- Automatic charts chosen by fixed rules from the shape of the result, never by the model, with a "Chart type" selector offering only the types that fit: bar, pie, donut, treemap and funnel for categories; line, area and bar over time, one line per category when there are two dimensions; stacked and grouped bars, heatmap, treemap and Sankey for two categories; grouped bar and radar for several measures; scatter and bubble for numbers; histogram and box plot for distributions; a world map for countries; Gantt for start and end dates.
 - Conversation history per user, readable through `GET /conversations/{id}`.
 
 ### Safety and access control

@@ -71,7 +71,7 @@ Code changes need `--build`; `.env` or compose environment changes need the cont
 - Widening the SQL function allowlist is a security change: add an acceptance test and run the real-model evaluation.
 - Roles: `analyst` → `orders`, `regions`; `limited` → `regions`. The role comes from the users table on every request, never from the token's claims. Unknown roles raise `AccessError` (403), never fall back.
 - Every number in a model-written answer must appear in the result or question; otherwise use the plain fallback. One-row results containing NULL count as no data. Totals and percentages belong in deterministic code.
-- Charts come from `bi/chart.py` rules; the frontend only maps `bar`/`line` to built-in Streamlit charts.
+- Charts come from `bi/chart.py` rules: the spec has the suggested `type`, the `options` that fit (suggestion first) and the column roles (`x`, `y`, `series`, `values`, `size`, `location`, `start`, `end`). The frontend draws only offered types (Plotly, `frontend/charts.py`) and lets the user switch between them. The model never picks a chart. Funnel needs a stage-like label column; shapes are recognised in any column order.
 - Conversations are in memory, capped, keyed `username:conversation_id`; another user's ID returns 404, not 403.
 - The Streamlit token lives only in server-side session state; refresh signs the user out.
 
