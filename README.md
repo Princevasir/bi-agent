@@ -70,6 +70,7 @@ The full list of what the project offers today. Keep it current as features land
 - A themed chat with a welcome screen of clickable example questions for your role, and the same examples in the sidebar.
 - Each answer as a headline with tabs for an interactive Plotly chart, the table and the SQL; single numbers get a big-number card; monthly results are labelled "Aug 2026" rather than timestamps.
 - Clear, distinct notes for declined questions, empty results, queries that were too broad or rejected, access denied, rate limits, timeouts and an unavailable model.
+- Under each answer, a **Sources** line names the business documents the agents used (title, type, version), and a **How I answered** panel lists each agent's step in plain words with its time, plus the total.
 - Streamlit's usage statistics are turned off.
 
 ### Reliability and operations
@@ -173,7 +174,7 @@ All routes except the first four need `Authorization: Bearer <token>` from `/aut
 | GET | `/hello` | Smoke test |
 | GET | `/ready` | Readiness: 200 when both databases answer, 503 otherwise |
 | POST | `/auth/login` | `{"username", "password"}` → access token and role |
-| POST | `/ask` | `{"message", "conversation_id"?}` → answer, SQL, rows, chart, sources (knowledge documents used), route, trace (agent steps), conversation ID |
+| POST | `/ask` | `{"message", "conversation_id"?}` → answer, SQL, rows, chart, sources (knowledge documents used), route, trace (agent, step and milliseconds for each step), conversation ID |
 | POST | `/ask/sql` | Generate and validate SQL for a question without running it (422 if the validator rejects it) |
 | GET | `/conversations/{id}` | Turns of one of your own conversations |
 | GET | `/schema` | Tables and columns your role can see |

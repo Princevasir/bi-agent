@@ -63,3 +63,51 @@ def status_for(error):
     if status == 504:
         return {"kind": "warning", "icon": "⏱️", "text": text}
     return {"kind": "error", "icon": "⚠️", "text": text}
+
+
+
+# ---- D3: sources and "How I answered" --------------------------------------------------------------
+
+DOC_TYPES = {"sql_example": "SQL example", "data_quality": "data quality note", "metric": "metric",
+             "rule": "rule", "dashboard": "dashboard", "document": "document"}
+STEPS = {
+    "route": "Understood the question and chose the agents",
+    "rewrite": "Rewrote the follow-up as a standalone question",
+    "find_knowledge": "Looked up business definitions, rules and example queries",
+    "catalog_answer": "Answered from the data catalog",
+    "write_sql": "Wrote the SQL query",
+    "second_opinion": "Took a second look before declining",
+    "check_sql": "Checked the query against the safety rules",
+    "execute": "Ran the query on a read-only login",
+    "declined": "Declined: not a question about the data",
+    "explain": "Drafted the answer",
+    "ground": "Checked every number against the result",
+    "no_rows": "Reported that no data matched",
+    "draw": "Chose a chart for the result",
+    "redraw": "Redrew the last result",
+}
+
+
+def source_line(sources):
+    """One line naming each knowledge document the answer used, or None."""
+    seen, parts = set(), []
+    for s in sources or []:
+        if s["document_id"] in seen:
+            continue
+        seen.add(s["document_id"])
+        parts.append(f"{s['title']} ({DOC_TYPES.get(s['doc_type'], s['doc_type'])}, v{s['version']})")
+    return "Sources: " + " · ".join(parts) if parts else None
+
+
+def _seconds(ms):
+    return f"{ms / 1000:.1f} s"
+
+
+def trace_lines(trace):
+    """(agent, what it did, time) for each step the agents took, in order."""
+    return [(t["agent"], STEPS.get(t["step"], pretty_label(t["step"])), _seconds(t["ms"]) if "ms" in t else "")
+            for t in trace or []]
+
+
+def total_seconds(trace):
+    return _seconds(sum(t.get("ms", 0) for t in trace)) if trace else ""

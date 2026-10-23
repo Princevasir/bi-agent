@@ -213,7 +213,7 @@ svg text{font-family:inherit}
       <tr><td>4 Vector store</td><td>pgvector in the existing Postgres, HNSW cosine index, metadata columns</td><td>No metadata to filter on</td></tr>
       <tr><td>5 Retrieval</td><td>Top 5, filtered in SQL by role, active status and embedding model; a calibrated similarity floor of 0.60; a 1,500-token context cap</td><td>Top-K too low or too high</td></tr>
       <tr><td>6 Reranking</td><td>Measured first: MRR is already 0.939, so not added yet</td><td>Adding complexity without evidence</td></tr>
-      <tr><td>7 Generation</td><td>Retrieved text goes into the SQL prompt, fenced as reference material; sources are returned and audited</td><td>No source citation</td></tr>
+      <tr><td>7 Generation</td><td>Retrieved text goes into the SQL prompt, fenced as reference material; sources are returned, audited and shown under every answer</td><td>No source citation</td></tr>
     </tbody>
   </table></div>
 </div></section>
@@ -294,7 +294,7 @@ svg text{font-family:inherit}
   <div class="tablewrap"><table>
     <thead><tr><th>#</th><th>Say this</th><th>What it shows</th></tr></thead>
     <tbody>
-      <tr><td>1</td><td>What was the average order value in 2025?</td><td>RAG fixes a classic mistake: 376.09, with SQL, table and sources</td></tr>
+      <tr><td>1</td><td>What was the average order value in 2025?</td><td>RAG fixes a classic mistake: 376.09, with SQL, table and the Sources line; open <b>How I answered</b> to show the five agents and where the time goes</td></tr>
       <tr><td>2</td><td>What was revenue by region in 2025? then <i>make it a pie chart</i></td><td>Chart rules; redraw without a model call</td></tr>
       <tr><td>3</td><td>What was revenue in fiscal year 2025? then <i>And the year before?</i></td><td>Business rule (fiscal year) and a follow-up rewritten into a standalone question</td></tr>
       <tr><td>4</td><td>What tables can I see?</td><td>Answered from the data catalog: no model, no SQL</td></tr>
@@ -362,7 +362,7 @@ open http://localhost:8501</pre>
     <tbody>
       <tr><td>D1</td><td>Hard step limit on every question</td><td>Error handling: no infinite loops</td><td><span class="tag t-ok">done</span></td></tr>
       <tr><td>D2</td><td>Five specialist agents, coordinator inside the graph, agent trace</td><td>Mandatory: agents, coordinator, boundaries</td><td><span class="tag t-ok">done</span></td></tr>
-      <tr><td>D3</td><td>Sources and a "How I answered" panel in the UI</td><td>RAG: source citation; agents visible</td><td><span class="tag t-warn">in progress</span></td></tr>
+      <tr><td>D3</td><td>Sources and a "How I answered" panel in the UI</td><td>RAG: source citation; agents visible</td><td><span class="tag t-ok">done</span></td></tr>
       <tr><td>D4</td><td>Setup in three commands</td><td>Code quality: run it in 3 commands</td><td><span class="tag t-brand">planned</span></td></tr>
       <tr><td>D5</td><td>A token budget that cannot end the demo</td><td>Cost controls without breaking the demo</td><td><span class="tag t-brand">planned</span></td></tr>
       <tr><td>D6</td><td>Fast demo model (Groq), local model as fallback</td><td>Demo reliability</td><td><span class="tag t-brand">planned</span></td></tr>

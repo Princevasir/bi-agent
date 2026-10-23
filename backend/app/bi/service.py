@@ -4,6 +4,7 @@ The coordinator routes each message; the graph runs the steps of the agents it c
 step in the trace, and stops within max_steps whatever happens.
 """
 import operator
+import time
 from dataclasses import dataclass
 from datetime import date
 from typing import Annotated, Callable, Optional, TypedDict
@@ -63,7 +64,10 @@ STEPS = {
 
 def _traced(name, step, ctx):
     def run(state):
-        return {**step(state, ctx), "trace": [{"agent": OWNER[name], "step": name}]}
+        started = time.perf_counter()
+        out = step(state, ctx)
+        ms = round((time.perf_counter() - started) * 1000, 1)
+        return {**out, "trace": [{"agent": OWNER[name], "step": name, "ms": ms}]}
     return run
 
 

@@ -337,3 +337,49 @@ def test_ask_about_a_table_switches_to_the_chat(with_catalog, backend):
     at.button(key="ask-orders").click().run()
     assert at.session_state["view"] == "Chat"
     assert backend.calls[-1][1]["message"] == "Describe the orders table"
+
+
+# ---- D3: sources and "How I answered" ------------------------------------------------------------------
+
+TRACE = [{"agent": "Coordinator", "step": "route", "ms": 0.4}, {"agent": "Knowledge", "step": "find_knowledge", "ms": 61},
+         {"agent": "SQL", "step": "write_sql", "ms": 18234}, {"agent": "SQL", "step": "check_sql", "ms": 3},
+         {"agent": "SQL", "step": "execute", "ms": 412}, {"agent": "Analyst", "step": "explain", "ms": 9120},
+         {"agent": "Analyst", "step": "ground", "ms": 0.2}, {"agent": "Chart", "step": "draw", "ms": 0.3}]
+WITH_KNOWLEDGE = {**REGIONS, "route": "data", "trace": TRACE, "sources": [
+    {"document_id": "sql-revenue-by-region", "title": "Revenue by region", "doc_type": "sql_example",
+     "owner": "Sales Analytics", "version": 1, "score": 0.8}]}
+
+
+def ask_with(backend, result, question="Revenue by region in September 2026?"):
+    backend.result = result
+    at = signed_in_app()
+    return at.chat_input[0].set_value(question).run()
+
+
+def test_an_answer_lists_its_sources(backend):
+    at = ask_with(backend, WITH_KNOWLEDGE)
+    assert not at.exception
+    assert "Sources: Revenue by region (SQL example, v1)" in all_text(at)
+
+
+def test_how_i_answered_shows_each_agent_step_and_the_time(backend):
+    at = ask_with(backend, WITH_KNOWLEDGE)
+    [panel] = [e for e in at.expander if e.label.startswith("How I answered")]
+    assert "27.8 s" in panel.label
+    text = " ".join(str(m.value) for m in panel.markdown)
+    for agent in ("Coordinator", "Knowledge", "SQL", "Analyst", "Chart"):
+        assert agent in text
+    assert "Wrote the SQL query" in text and "18.2 s" in text
+
+
+def test_a_declined_message_also_shows_how_it_was_handled(backend):
+    trace = [{"agent": "Coordinator", "step": "route", "ms": 0.1}, {"agent": "Knowledge", "step": "find_knowledge", "ms": 1},
+             {"agent": "SQL", "step": "write_sql", "ms": 900}, {"agent": "SQL", "step": "declined", "ms": 0.1}]
+    at = ask_with(backend, {**DECLINED, "trace": trace, "sources": []}, "hello")
+    assert any(e.label.startswith("How I answered") for e in at.expander)
+
+
+def test_older_answers_without_sources_or_trace_show_neither(backend):
+    at = ask_with(backend, REGIONS)
+    assert not at.exception and "Sources:" not in all_text(at)
+    assert not any(e.label.startswith("How I answered") for e in at.expander)

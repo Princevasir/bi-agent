@@ -4,7 +4,8 @@ import streamlit as st
 import client
 from charts import LABELS, build_figure
 from client import BackendError
-from presentation import is_declined, is_no_data, pretty_label, single_value, status_for
+from presentation import (is_declined, is_no_data, pretty_label, single_value, source_line, status_for,
+                          total_seconds, trace_lines)
 
 st.set_page_config(page_title="BI Agent", page_icon="📊", layout="wide")
 
@@ -81,25 +82,39 @@ def show_status(status):
     getattr(st, status["kind"])(status["text"], icon=status["icon"])
 
 
+def how_i_answered(msg):
+    """D3: which agent did what, and how long each step took."""
+    if not msg.get("trace"):
+        return
+    with st.expander(f"How I answered · {total_seconds(msg['trace'])}"):
+        for i, (agent, did, took) in enumerate(trace_lines(msg["trace"]), 1):
+            st.markdown(f"{i}. **{agent}** · {plain(did)}" + (f" · {took}" if took else ""))
+
+
 def show_answer(msg, index):
     if msg.get("error"):
         show_status(msg["error"])
         return
     if is_declined(msg):
         st.info(msg["answer"], icon="💬")
+        how_i_answered(msg)
         return
     if is_no_data(msg):
         st.info(msg["answer"], icon="📭")
         with st.expander("SQL"):
             st.code(msg["sql"], language="sql")
+        how_i_answered(msg)
         return
     if not msg.get("rows") and not msg.get("sql"):     # an answer about the data with nothing to list
         st.info(msg["answer"], icon="ℹ️")
+        how_i_answered(msg)
         return
 
     st.markdown(f"##### {plain(msg['answer'])}")
     if msg.get("interpreted_as") and msg["interpreted_as"] != msg.get("question"):
         st.caption(f"Interpreted as: {plain(msg['interpreted_as'])}")
+    if sources := source_line(msg.get("sources")):
+        st.caption(plain(sources))
     if msg.get("chart_note"):
         st.info(msg["chart_note"], icon="ℹ️")
     card = single_value(msg["columns"], msg["rows"])
@@ -129,6 +144,7 @@ def show_answer(msg, index):
     if "🧩 SQL" in tabs:
         with tabs["🧩 SQL"]:
             st.code(msg["sql"], language="sql")
+    how_i_answered(msg)
 
 
 def handle(question):

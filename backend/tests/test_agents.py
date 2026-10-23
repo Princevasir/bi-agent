@@ -119,7 +119,7 @@ def model():
 @pytest.mark.integration
 def test_ask_returns_the_route_and_the_trace(model):
     body = client.post("/ask", json={"message": "What was revenue by region?"}).json()
-    assert body["route"] == "data" and body["trace"][0] == {"agent": "Coordinator", "step": "route"}
+    assert body["route"] == "data" and steps(body)[0] == ("Coordinator", "route")
     again = client.post("/ask", json={"message": "make it a donut", "conversation_id": body["conversation_id"]})
     assert again.json()["route"] == "chart_change" and again.json()["chart"]["type"] == "donut"
 
@@ -127,3 +127,24 @@ def test_ask_returns_the_route_and_the_trace(model):
 def test_ask_answers_catalog_questions_with_a_trace(model):
     body = client.post("/ask", json={"message": "What tables can I see?"}).json()
     assert body["route"] == "catalog" and [s["agent"] for s in body["trace"]] == ["Coordinator", "Knowledge"]
+
+
+# ---- step timings (demo gap D3) ------------------------------------------------------------------------------
+
+@pytest.mark.integration
+def test_every_step_records_how_long_it_took():
+    out = ask("What was revenue by region?", RoutedLLM(SQL, answer="North was 520."))
+    assert all(isinstance(s["ms"], (int, float)) and s["ms"] >= 0 for s in out["trace"])
+
+
+def test_a_slow_step_shows_its_time():
+    import time
+
+    class Slow(RoutedLLM):
+        def generate(self, prompt):
+            time.sleep(0.05)
+            return super().generate(prompt)
+
+    out = ask("And August?", Slow("NO_QUERY", rewrite="hello"), HISTORY)
+    rewrite = next(s for s in out["trace"] if s["step"] == "rewrite")
+    assert rewrite["ms"] >= 50
