@@ -40,6 +40,20 @@ allowed_types = [
 allowed_names = ["date_part", "make_date", "age", "to_date", "to_timestamp"]
 # Second check behind the allowlist; no allowed name may start with one of these.
 blocked_prefixes = ["pg_", "lo_", "dblink", "set_config", "current_setting"]
+# The SQL names listed in the model's prompt (GR-POL-02). Every one must be accepted by the
+# validator: tests/test_prompt_rules.py checks an example call for each.
+prompt_functions = [
+  "count", "sum", "avg", "min", "max", "stddev", "percentile_cont", "string_agg", "array_agg",
+  "bool_and", "bool_or",
+  "row_number", "rank", "dense_rank", "percent_rank", "cume_dist", "ntile", "lag", "lead",
+  "first_value", "last_value", "nth_value",
+  "coalesce", "nullif", "greatest", "least",
+  "abs", "round", "ceil", "floor", "sqrt", "power", "ln", "log", "exp", "sign",
+  "date_trunc", "extract", "date_part", "to_char", "to_date", "to_timestamp", "make_date", "age",
+  "now", "current_date",
+  "lower", "upper", "trim", "length", "concat", "concat_ws", "substring", "replace", "initcap",
+  "left", "right", "strpos", "split_part",
+]
 
 # Which tables each role may query, and which environment variable holds its read-only
 # database login. The database grants are the real enforcement; these must match them.

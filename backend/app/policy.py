@@ -38,6 +38,7 @@ class Policy:
     allowed_function_types: frozenset
     allowed_function_names: frozenset
     blocked_prefixes: tuple
+    prompt_functions: tuple
     roles: dict
 
 
@@ -80,7 +81,7 @@ def load(path=None):
             raise PolicyError(f"[sql] {name} must be a whole number greater than 0.")
 
     fn = sql["functions"]
-    _keys(fn, "[sql.functions]", ("allowed_types", "allowed_names", "blocked_prefixes"))
+    _keys(fn, "[sql.functions]", ("allowed_types", "allowed_names", "blocked_prefixes", "prompt_functions"))
     types = _strings(fn["allowed_types"], "[sql.functions] allowed_types")
     for t in types:
         cls = getattr(exp, t, None)
@@ -91,6 +92,10 @@ def load(path=None):
     for n in names:
         if n != n.lower() or n.startswith(prefixes):
             raise PolicyError(f"[sql.functions] allowed_names: {n} must be lower case and not blocked.")
+    shown = _strings(fn["prompt_functions"], "[sql.functions] prompt_functions")
+    for n in shown:
+        if not TABLE_NAME.match(n) or n.startswith(prefixes):
+            raise PolicyError(f"[sql.functions] prompt_functions: {n} must be a lower-case SQL name, not blocked.")
 
     roles = doc["roles"]
     if not isinstance(roles, dict) or not roles:
@@ -114,7 +119,7 @@ def load(path=None):
         path=path, sha256=hashlib.sha256(raw).hexdigest(),
         sql={k: sql[k] for k in SQL_LIMITS},
         allowed_function_types=frozenset(types), allowed_function_names=frozenset(names),
-        blocked_prefixes=prefixes, roles=parsed,
+        blocked_prefixes=prefixes, prompt_functions=tuple(shown), roles=parsed,
     )
 
 

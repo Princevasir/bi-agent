@@ -1,10 +1,29 @@
 import re
 from datetime import date
 
+from app import policy
 from app.bi.schema import metrics_text, schema_text
 
 FENCE = re.compile(r"```(?:sql)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
 NO_QUERY = "NO_QUERY"
+
+
+def rules_text() -> str:
+    """The SQL rules the validator enforces, worded for the model (GR-POL-02)."""
+    p = policy.get()
+    return (
+        "Rules (the query is checked against these and rejected if it breaks one):\n"
+        "- Read only: one SELECT, or a UNION, INTERSECT or EXCEPT of SELECTs. Never INSERT, UPDATE, DELETE "
+        "or change the schema, not even inside WITH.\n"
+        "- Join every table with a condition that links it to another table (JOIN ... ON a.col = b.col). "
+        "No CROSS JOIN and no comma joins without a linking condition, except to a one-row total such as "
+        "(SELECT sum(x) AS total FROM t).\n"
+        f"- Use at most {p.sql['max_tables']} table references and at most {p.sql['max_depth']} levels "
+        "of nested subqueries.\n"
+        "- Do not use schema-qualified names or functions in FROM (such as generate_series or unnest).\n"
+        f"- Use only these functions (CASE expressions and CAST or :: casts are also fine): "
+        f"{', '.join(p.prompt_functions)}."
+    )
 
 
 def build_prompt(question: str, today: date, role: str = "analyst") -> str:
@@ -18,6 +37,7 @@ def build_prompt(question: str, today: date, role: str = "analyst") -> str:
         f"small talk) or asks to change or delete data, return exactly {NO_QUERY} instead.\n\n"
         f"Today's date: {today.isoformat()}\n\n"
         f"Schema:\n{schema_text(role)}\n\nMetrics:\n{metrics_text(role)}\n\n"
+        f"{rules_text()}\n\n"
         f"Question: {question}\nSQL:"
     )
 

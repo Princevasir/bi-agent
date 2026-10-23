@@ -104,6 +104,7 @@ BROKEN = {
     "bad table name": (VALID.replace('tables = ["regions"]', 'tables = ["regions; drop"]'), "regions; drop"),
     "missing database variable": (VALID.replace('database_url_env = "DATABASE_URL_LIMITED"', ""),
                                   "database_url_env"),
+    "prompt function in upper case": (VALID.replace('"count",', '"COUNT",', 1), "COUNT"),
 }
 
 
