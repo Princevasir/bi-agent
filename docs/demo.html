@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BI Agent Demo</title>
+<style>
+:root{
+  --bg:#f6f7fb; --card:#ffffff; --ink:#1b1f2a; --muted:#5b6375; --line:#e2e5ee;
+  --brand:#4f46e5; --brand-soft:#eef0ff; --ok:#0f9d6b; --ok-soft:#e6f6ef; --warn:#c27803; --warn-soft:#fdf3e1;
+  --bad:#c8312f; --bad-soft:#fdecec; --code:#f0f2f8;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#11131a; --card:#1a1d27; --ink:#e8eaf2; --muted:#a2a9bb; --line:#2c3040;
+  --brand:#8b85ff; --brand-soft:#23234a; --ok:#3ccf95; --ok-soft:#12352a; --warn:#f0b44c; --warn-soft:#3a2d12;
+  --bad:#ff7a76; --bad-soft:#3d1c1c; --code:#222634; } }
+:root[data-theme="dark"]{
+  --bg:#11131a; --card:#1a1d27; --ink:#e8eaf2; --muted:#a2a9bb; --line:#2c3040;
+  --brand:#8b85ff; --brand-soft:#23234a; --ok:#3ccf95; --ok-soft:#12352a; --warn:#f0b44c; --warn-soft:#3a2d12;
+  --bad:#ff7a76; --bad-soft:#3d1c1c; --code:#222634; }
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif}
+.slide{min-height:100vh;padding:48px max(16px,6vw);display:flex;flex-direction:column;justify-content:center;border-bottom:1px solid var(--line)}
+.slide>.inner{max-width:1120px;width:100%;margin:0 auto}
+.kicker{color:var(--brand);font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-size:13px;margin:0 0 6px}
+h1{font-size:clamp(32px,5vw,56px);line-height:1.1;margin:0 0 16px}
+h2{font-size:clamp(24px,3.2vw,36px);margin:0 0 20px;line-height:1.2}
+h3{margin:0 0 6px;font-size:18px}
+p{margin:0 0 12px}
+.lead{font-size:clamp(17px,2vw,21px);color:var(--muted);max-width:820px}
+.grid{display:grid;gap:16px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.g4{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.card p,.card li{color:var(--muted);font-size:15px}
+.card ul{margin:6px 0 0;padding-left:18px}
+.tag{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;margin-right:4px}
+.t-ok{background:var(--ok-soft);color:var(--ok)} .t-warn{background:var(--warn-soft);color:var(--warn)} .t-bad{background:var(--bad-soft);color:var(--bad)} .t-brand{background:var(--brand-soft);color:var(--brand)}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+tr:last-child td{border-bottom:0}
+code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px}
+code{background:var(--code);padding:1px 5px;border-radius:5px}
+pre{background:var(--code);padding:14px 16px;border-radius:10px;overflow-x:auto;margin:0}
+.big{font-size:clamp(28px,4vw,40px);font-weight:800;color:var(--brand);line-height:1}
+.stat .lbl{color:var(--muted);font-size:14px;margin-top:6px}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.node{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-weight:600;font-size:14px}
+.node.llm{border-color:var(--brand);background:var(--brand-soft)}
+.node.det{border-color:var(--ok)}
+.arrow{color:var(--muted)}
+.legend{font-size:13px;color:var(--muted);margin-top:10px}
+svg text{font-family:inherit}
+.diagram{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px}
+.nav{position:fixed;right:16px;bottom:16px;display:flex;gap:6px;z-index:5}
+.nav button{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:6px 10px;font-size:14px;cursor:pointer}
+.count{position:fixed;left:16px;bottom:16px;font-size:13px;color:var(--muted)}
+@media print{.nav,.count{display:none}.slide{min-height:auto;page-break-after:always}}
+</style>
+</head>
+<body>
+
+<!-- 1 -->
+<section class="slide"><div class="inner">
+  <p class="kicker">Capstone demo · Agentic AI</p>
+  <h1>BI Agent: ask your business data in plain English</h1>
+  <p class="lead">A natural-language analytics assistant for Trailhead Outfitters, a fictional outdoor retailer. You ask a question; it returns a grounded answer, the SQL it ran, a table and a chart. It uses business knowledge (RAG) to get definitions right, and it is safe by design.</p>
+  <div class="grid g4" style="margin-top:24px">
+    <div class="card stat"><div class="big">29</div><div class="lbl">retail tables, 2.37M rows</div></div>
+    <div class="card stat"><div class="big">64</div><div class="lbl">knowledge documents, 77 chunks</div></div>
+    <div class="card stat"><div class="big">955</div><div class="lbl">automated tests (883 backend, 72 frontend)</div></div>
+    <div class="card stat"><div class="big">23/23</div><div class="lbl">real-model evaluation cases</div></div>
+  </div>
+</div></section>
+
+<!-- 2 -->
+<section class="slide"><div class="inner">
+  <p class="kicker">The problem</p>
+  <h2>Business people have questions; the answers sit in SQL</h2>
+  <div class="grid g3">
+    <div class="card"><h3>Without the agent</h3><p>A manager asks "What was revenue by region last fiscal year?" and waits for an analyst, who must know which orders count, how regions are assigned and when the fiscal year starts.</p></div>
+    <div class="card"><h3>The naive AI fix fails</h3><p>"Send the question to an LLM and run its SQL" gives confident wrong numbers (averaging order lines instead of orders), can leak personal data, and can be talked into destructive queries.</p></div>
+    <div class="card"><h3>What this system guarantees</h3><ul><li>SQL only runs after a validator and on a read-only login for the user's role</li><li>Every number in an answer comes from the query result</li><li>Business definitions come from owned, versioned documents</li></ul></div>
+  </div>
+</div></section>
+
+<!-- 3 -->
+<section class="slide"><div class="inner">
+  <p class="kicker">System design</p>
+  <h2>Architecture</h2>
+  <div class="diagram">
+  <svg viewBox="0 0 1080 470" width="100%" role="img" aria-label="Architecture diagram">
+    <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+    <g fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--muted)">
+      <line x1="150" y1="80" x2="250" y2="80" marker-end="url(#a)"/>
+      <line x1="430" y1="80" x2="520" y2="80" marker-end="url(#a)"/>
+      <line x1="610" y1="125" x2="610" y2="175" marker-end="url(#a)"/>
+      <line x1="460" y1="300" x2="300" y2="370" marker-end="url(#a)"/>
+      <line x1="610" y1="330" x2="610" y2="370" marker-end="url(#a)"/>
+      <line x1="770" y1="300" x2="900" y2="370" marker-end="url(#a)"/>
+      <line x1="800" y1="230" x2="880" y2="230" marker-end="url(#a)"/>
+    </g>
+    <g font-size="14">
+      <rect x="20" y="45" width="130" height="70" rx="10" fill="var(--card)" stroke="var(--line)"/>
+      <text x="85" y="76" text-anchor="middle" fill="var(--ink)" font-weight="700">User</text>
+      <text x="85" y="96" text-anchor="middle" fill="var(--muted)">browser</text>
+
+      <rect x="250" y="45" width="180" height="70" rx="10" fill="var(--card)" stroke="var(--line)"/>
+      <text x="340" y="76" text-anchor="middle" fill="var(--ink)" font-weight="700">Streamlit UI</text>
+      <text x="340" y="96" text-anchor="middle" fill="var(--muted)">sign-in, chat, charts</text>
+
+      <rect x="520" y="35" width="180" height="90" rx="10" fill="var(--card)" stroke="var(--line)"/>
+      <text x="610" y="66" text-anchor="middle" fill="var(--ink)" font-weight="700">FastAPI /ask</text>
+      <text x="610" y="86" text-anchor="middle" fill="var(--muted)">JWT auth, role lookup,</text>
+      <text x="610" y="104" text-anchor="middle" fill="var(--muted)">router, audit, budget</text>
+
+      <rect x="420" y="175" width="380" height="155" rx="12" fill="var(--brand-soft)" stroke="var(--brand)"/>
+      <text x="610" y="200" text-anchor="middle" fill="var(--brand)" font-weight="700">LangGraph workflow (orchestration)</text>
+      <text x="610" y="226" text-anchor="middle" fill="var(--ink)">rewrite → find knowledge → write SQL</text>
+      <text x="610" y="250" text-anchor="middle" fill="var(--ink)">→ validate → execute → explain → ground</text>
+      <text x="610" y="276" text-anchor="middle" fill="var(--muted)">one bounded repair · one second opinion</text>
+      <text x="610" y="298" text-anchor="middle" fill="var(--muted)">deterministic chart rules</text>
+
+      <rect x="880" y="195" width="180" height="70" rx="10" fill="var(--card)" stroke="var(--line)"/>
+      <text x="970" y="226" text-anchor="middle" fill="var(--ink)" font-weight="700">LLM</text>
+      <text x="970" y="246" text-anchor="middle" fill="var(--muted)">Ollama qwen2.5-coder 7B</text>
+
+      <rect x="160" y="370" width="240" height="80" rx="10" fill="var(--card)" stroke="var(--line)"/>
+      <text x="280" y="400" text-anchor="middle" fill="var(--ink)" font-weight="700">Knowledge index</text>
+      <text x="280" y="420" text-anchor="middle" fill="var(--muted)">pgvector in appdb,</text>
+      <text x="280" y="438" text-anchor="middle" fill="var(--muted)">nomic-embed-text (Ollama)</text>
+
+      <rect x="490" y="370" width="240" height="80" rx="10" fill="var(--card)" stroke="var(--line)"/>
+      <text x="610" y="400" text-anchor="middle" fill="var(--ink)" font-weight="700">Retail database</text>
+      <text x="610" y="420" text-anchor="middle" fill="var(--muted)">read-only login per role,</text>
+      <text x="610" y="438" text-anchor="middle" fill="var(--muted)">timeouts, row and byte caps</text>
+
+      <rect x="820" y="370" width="240" height="80" rx="10" fill="var(--card)" stroke="var(--line)"/>
+      <text x="940" y="400" text-anchor="middle" fill="var(--ink)" font-weight="700">App database</text>
+      <text x="940" y="420" text-anchor="middle" fill="var(--muted)">users, insert-only audit trail</text>
+      <text x="940" y="438" text-anchor="middle" fill="var(--muted)">(appdb)</text>
+    </g>
+  </svg>
+  </div>
+  <p class="legend">Everything runs in Docker Compose (Postgres 16 with pgvector, backend, frontend); the models run locally in Ollama.</p>
+</div></section>
+
+<!-- 4 -->
+<section class="slide"><div class="inner">
+  <p class="kicker">The five layers</p>
+  <h2>Mapping the project to the five layers of an AI system</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Layer</th><th>In this project</th></tr></thead>
+    <tbody>
+      <tr><td><b>01 Interface</b></td><td>Streamlit chat UI (answer cards, Chart / Table / SQL tabs, data catalog page) and a FastAPI REST API (<code>/ask</code>, <code>/catalog</code>, <code>/ready</code>, ...)</td></tr>
+      <tr><td><b>02 Orchestration</b></td><td>A router in <code>/ask</code> (chart change, question about the data, or data question) and a LangGraph <code>StateGraph</code> with typed state and conditional edges</td></tr>
+      <tr><td><b>03 Agents</b></td><td>Specialists with one job each: rewriter, knowledge retriever, SQL writer, SQL validator, executor, explainer, grounding checker, chart builder. The LLM is used in three of them only.</td></tr>
+      <tr><td><b>04 Data &amp; RAG</b></td><td>Retail database (29 tables) with a data catalog; 64 business documents chunked by type, embedded with <code>nomic-embed-text</code>, stored in pgvector, retrieved with metadata filters in SQL</td></tr>
+      <tr><td><b>05 Infrastructure</b></td><td>Docker Compose, health and readiness checks, JSON logs with request IDs, an audit trail, a token budget, per-role database logins</td></tr>
+    </tbody>
+  </table></div>
+</div></section>
+
+<!-- 5 -->
+<section class="slide"><div class="inner">
+  <p class="kicker">Orchestration pattern</p>
+  <h2>A sequential pipeline with conditional routing</h2>
+  <p class="lead">Chosen on purpose: the steps must happen in order, and every step is easy to test and debug. The flow is designed explicitly (LangGraph), not left to the model.</p>
+  <div class="card" style="margin-top:12px">
+    <div class="flow">
+      <span class="node det">Router</span><span class="arrow">→</span>
+      <span class="node llm">Rewriter</span><span class="arrow">→</span>
+      <span class="node det">Knowledge retriever</span><span class="arrow">→</span>
+      <span class="node llm">SQL writer</span><span class="arrow">→</span>
+      <span class="node det">SQL validator</span><span class="arrow">→</span>
+      <span class="node det">Executor</span><span class="arrow">→</span>
+      <span class="node llm">Explainer</span><span class="arrow">→</span>
+      <span class="node det">Grounding checker</span><span class="arrow">→</span>
+      <span class="node det">Chart builder</span>
+    </div>
+    <p class="legend"><span class="tag t-brand">LLM</span> uses the model · <span class="tag t-ok">code</span> deterministic Python. Branches: chart-only messages and questions about the data never call the model; a declined question gets one second opinion; a rejected or failed query gets one repair; no rows ends in a plain answer.</p>
+  </div>
+  <div class="grid g2" style="margin-top:16px">
+    <div class="card"><h3>Why not a multi-agent free-for-all?</h3><p>A BI answer must be correct and safe. Letting the model choose tools would make authorisation depend on the model. Here, the LLM never decides what may run.</p></div>
+    <div class="card"><h3>Shared state</h3><p>LangGraph's typed state (question, standalone question, knowledge, SQL, rows, answer, repair counters) is passed from step to step and returned with the answer.</p></div>
+  </div>
+</div></section>
+
+<!-- 6 -->
+<section class="slide"><div class="inner">
+  <p class="kicker">Design decisions</p>
+  <h2>The four decisions</h2>
+  <div class="grid g2">
+    <div class="card"><h3>D1 Agent boundaries</h3><ul><li>SQL writer: turns a question into one SELECT</li><li>SQL validator: allows or rejects it (never the LLM)</li><li>Executor: runs it on the role's read-only login</li><li>Explainer: writes a sentence about the result; the grounding checker rejects invented numbers</li></ul></div>
+    <div class="card"><h3>D2 Communication</h3><p>A shared typed state object (LangGraph <code>StateGraph</code> with a <code>TypedDict</code>). Conversations are kept per user for follow-ups ("And August?").</p></div>
+    <div class="card"><h3>D3 Error boundaries</h3><ul><li>Bad SQL: one repair with the error, then a clear message</li><li>Model declines a real question: one second opinion</li><li>Knowledge index down: answer without knowledge</li><li>Model writes an ungrounded sentence: fall back to a plain answer from the rows</li></ul></div>
+    <div class="card"><h3>D4 Termination</h3><ul><li>Every loop has a counter from the policy file: <code>repair_attempts = 1</code>, <code>decline_retries = 1</code></li><li>A hard cap of <code>max_steps = 15</code> workflow steps per question (the longest normal path takes 11); a run that reaches it is stopped and audited</li><li>Stops when the output validates, when no rows come back, or when the question is declined</li><li>Timeouts on the model and the database</li></ul></div>
+  </div>
+</div></section>
+
+<!-- 7 -->
+<section class="slide"><div class="inner">
+  <p class="kicker">RAG pipeline</p>
+  <h2>Every step is a design choice</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Step</th><th>Our choice</th><th>Common mistake avoided</th></tr></thead>
+    <tbody>
+      <tr><td>1 Source documents</td><td>64 Markdown documents with a TOML header (owner, version, status, access groups); a strict loader; SQL examples are executed by tests; facts are checked against the data</td><td>Raw unprocessed text</td></tr>
+      <tr><td>2 Chunking</td><td>By document type: one chunk per metric or rule, SQL examples never split, handbooks split at headings; each chunk starts with a context line</td><td>Chunks too large</td></tr>
+      <tr><td>3 Embedding</td><td><code>nomic-embed-text</code> (768 dimensions) with task prefixes; the model is recorded on every vector</td><td>Mixing embedding models (refused unless rebuilding)</td></tr>
+      <tr><td>4 Vector store</td><td>pgvector in the existing Postgres, HNSW cosine index, metadata columns</td><td>No metadata to filter on</td></tr>
+      <tr><td>5 Retrieval</td><td>Top 5, filtered in SQL by role, active status and embedding model; a calibrated similarity floor of 0.60; a 1,500-token context cap</td><td>Top-K too low or too high</td></tr>
+      <tr><td>6 Reranking</td><td>Measured first: MRR is already 0.939, so not added yet</td><td>Adding complexity without evidence</td></tr>
+      <tr><td>7 Generation</td><td>Retrieved text goes into the SQL prompt, fenced as reference material; sources are returned and audited</td><td>No source citation</td></tr>
+    </tbody>
+  </table></div>
+</div></section>
+
+<!-- 8 -->
+<section class="slide"><div class="inner">
+  <p class="kicker">Retrieval quality, tested on its own</p>
+  <h2>Retrieval was tested before it was connected to the agent</h2>
+  <div class="grid g4">
+    <div class="card stat"><div class="big">0.947</div><div class="lbl">Recall@5 on 38 labelled questions</div></div>
+    <div class="card stat"><div class="big">0.939</div><div class="lbl">MRR (the right document is usually first)</div></div>
+    <div class="card stat"><div class="big">100%</div><div class="lbl">questions with a relevant document</div></div>
+    <div class="card stat"><div class="big">49 ms</div><div class="lbl">p95 retrieval latency</div></div>
+  </div>
+  <div class="grid g2" style="margin-top:16px">
+    <div class="card"><h3>Irrelevant documents are filtered out</h3><p>Relevant matches scored at least 0.649 and off-topic questions ("hello", the weather, a poem) at most 0.556. With the threshold at 0.60, off-topic questions retrieve nothing and precision rose from 0.274 to 0.324.</p></div>
+    <div class="card"><h3>Access control in retrieval</h3><p>A limited user never receives documents about tables they cannot query, and superseded versions of a rule are never retrieved. Both are checked by tests.</p></div>
+  </div>
+</div></section>
+
+<!-- 9 -->
+<section class="slide"><div class="inner">
+  <p class="kicker">RAG adds real value</p>
+  <h2>Same 7B model, before and after business knowledge</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Question</th><th>Without knowledge</th><th>With knowledge</th><th>Document that made the difference</th></tr></thead>
+    <tbody>
+      <tr><td>What was the average order value in 2025?</td><td><span class="tag t-bad">206, wrong</span> averaged order lines</td><td><span class="tag t-ok">376.09</span> correct</td><td><code>sql-average-order-value</code>, <code>metric-average-order-value</code></td></tr>
+      <tr><td>What was revenue by region in 2025?</td><td><span class="tag t-bad">failed</span></td><td><span class="tag t-ok">4 regions</span> summing to the 39,618,496.22 total</td><td><code>sql-revenue-by-region</code></td></tr>
+      <tr><td>What was revenue in fiscal year 2025?</td><td>no knowledge of the fiscal calendar</td><td><span class="tag t-ok">39,905,806.83</span> February to January</td><td><code>sql-fiscal-year-revenue</code>, <code>rule-fiscal-calendar</code></td></tr>
+    </tbody>
+  </table></div>
+  <p class="legend">Every number was recounted directly in the database.</p>
+</div></section>
+
+<!-- 10 -->
+<section class="slide"><div class="inner">
+  <p class="kicker">Error handling</p>
+  <h2>The unhappy path was built first</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>What goes wrong</th><th>What the user sees</th></tr></thead>
+    <tbody>
+      <tr><td>The model writes invalid or unsafe SQL</td><td>One automatic repair using the error; if that fails, "The generated query was rejected." (422)</td></tr>
+      <tr><td>The model returns text instead of SQL</td><td>Treated as a rejection, never executed</td></tr>
+      <tr><td>The model declines a real data question</td><td>One second opinion; then a friendly explanation of what it can answer</td></tr>
+      <tr><td>The model times out or is rate-limited</td><td>504 or 429 with a plain message; details in the log with the request ID</td></tr>
+      <tr><td>The model invents a number in its sentence</td><td>The grounding check replaces it with a plain answer built from the rows</td></tr>
+      <tr><td>The embedding model or knowledge index is down</td><td>The question is answered without knowledge; a warning is logged</td></tr>
+      <tr><td>The database is down or slow</td><td>503 or 504; statement timeout; <code>/ready</code> reports which database is down</td></tr>
+      <tr><td>A query returns millions of rows</td><td>Read in batches through a server-side cursor, capped by rows and bytes</td></tr>
+      <tr><td>Too many tokens are used</td><td>A token budget stops further model calls (429)</td></tr>
+      <tr><td>Someone guesses passwords</td><td>Five failures lock the account for 15 minutes (429)</td></tr>
+    </tbody>
+  </table></div>
+</div></section>
+
+<!-- 11 -->
+<section class="slide"><div class="inner">
+  <p class="kicker">Safety</p>
+  <h2>Defence in depth: the LLM never enforces authorisation</h2>
+  <div class="flow" style="margin-bottom:16px">
+    <span class="node">Prompt shows only the role's tables</span><span class="arrow">→</span>
+    <span class="node">Validator (sqlglot)</span><span class="arrow">→</span>
+    <span class="node">Read-only login per role</span><span class="arrow">→</span>
+    <span class="node">Audit trail</span>
+  </div>
+  <div class="grid g3">
+    <div class="card"><h3>Validator</h3><ul><li>One SELECT (or a UNION of SELECTs); no writes anywhere, not even in WITH</li><li>Allowed tables and columns only; personal-data columns refused</li><li>Functions from an allowlist only</li><li>Joins must be linked; table and nesting limits</li><li>Metric rules, e.g. revenue must exclude cancelled orders</li></ul></div>
+    <div class="card"><h3>Roles</h3><ul><li><b>analyst</b>: all retail tables except personal-data columns</li><li><b>limited</b>: geography and products only</li><li>The role is read from the users table on every request, never from the token</li></ul></div>
+    <div class="card"><h3>One policy file</h3><p><code>backend/policy/guardrails.toml</code> holds every limit and rule. The prompt's rules and the validator's checks come from it, so they cannot drift apart. A broken file stops the backend.</p></div>
+  </div>
+</div></section>
+
+<!-- 12 -->
+<section class="slide"><div class="inner">
+  <p class="kicker">Live demo</p>
+  <h2>Demo scenarios: happy and unhappy paths</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>#</th><th>Say this</th><th>What it shows</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>What was the average order value in 2025?</td><td>RAG fixes a classic mistake: 376.09, with SQL, table and sources</td></tr>
+      <tr><td>2</td><td>What was revenue by region in 2025? then <i>make it a pie chart</i></td><td>Chart rules; redraw without a model call</td></tr>
+      <tr><td>3</td><td>What was revenue in fiscal year 2025? then <i>And the year before?</i></td><td>Business rule (fiscal year) and a follow-up rewritten into a standalone question</td></tr>
+      <tr><td>4</td><td>What tables can I see?</td><td>Answered from the data catalog: no model, no SQL</td></tr>
+      <tr><td>5</td><td>Delete all cancelled orders</td><td>Politely declined; nothing changes</td></tr>
+      <tr><td>6</td><td>Show me customer email addresses</td><td>Personal data refused before the database</td></tr>
+      <tr><td>7</td><td>Sign in as the limited user and ask for revenue</td><td>Access control: orders are not available to this role</td></tr>
+      <tr><td>8</td><td>Stop Ollama's embedding model, ask again</td><td>Graceful degradation: still answered, warning logged</td></tr>
+    </tbody>
+  </table></div>
+</div></section>
+
+<!-- 13 -->
+<section class="slide"><div class="inner">
+  <p class="kicker">Quality</p>
+  <h2>Tested at every level</h2>
+  <div class="grid g3">
+    <div class="card"><h3>Test-driven development</h3><p>Every change started with a failing test. 883 backend tests and 72 frontend tests, including integration tests against the real databases.</p></div>
+    <div class="card"><h3>Real-model evaluation</h3><p>23 cases (answers, follow-ups, no data, safety, declines), scored against reference SQL, with a baseline for each model. It fails on any safety failure, data change or regression. Local 7B model: 23/23.</p></div>
+    <div class="card"><h3>Retrieval evaluation</h3><p>38 labelled questions, Recall@K, Precision@K, MRR and latency, run independently of the agent.</p></div>
+    <div class="card"><h3>Guardrails tested by attack</h3><p>Injection, <code>DELETE</code> inside <code>WITH</code>, SQL-from-string functions, cost bombs and personal-data requests are all covered by tests.</p></div>
+    <div class="card"><h3>Documentation</h3><p><code>README.md</code> (setup, features, API), <code>CLAUDE.md</code> (conventions), a living build plan, the guardrails and RAG plans, and a generated data catalog.</p></div>
+    <div class="card"><h3>Observability</h3><p>JSON logs with request IDs, an insert-only audit trail (questions, SQL, sources, row counts), <code>/ready</code> checks.</p></div>
+  </div>
+</div></section>
+
+<!-- 14 -->
+<section class="slide"><div class="inner">
+  <p class="kicker">Tech stack</p>
+  <h2>Built with</h2>
+  <div class="grid g4">
+    <div class="card"><h3>Backend</h3><p>Python, FastAPI, LangGraph, sqlglot, psycopg, argon2, JWT</p></div>
+    <div class="card"><h3>Frontend</h3><p>Streamlit, Plotly</p></div>
+    <div class="card"><h3>Data</h3><p>PostgreSQL 16, pgvector 0.8.7</p></div>
+    <div class="card"><h3>Models</h3><p>Ollama: qwen2.5-coder 7B and nomic-embed-text; Groq and OpenRouter supported</p></div>
+  </div>
+  <h3 style="margin-top:24px">Run it</h3>
+<pre>docker compose up --build -d
+docker compose exec backend python -m app.cli create-user alice analyst
+open http://localhost:8501</pre>
+  <p class="legend">The retail data and the knowledge index need two more commands today (<code>retail.load</code>, <code>app.knowledge.ingest</code>); see the plan for a one-command demo setup.</p>
+</div></section>
+
+<!-- 15 -->
+<section class="slide"><div class="inner">
+  <p class="kicker">Thank you</p>
+  <h1>Questions?</h1>
+  <p class="lead">The goal was not the most complex system, but one that works reliably and can be explained: an LLM that writes queries, and code that decides what runs.</p>
+</div></section>
+
+<div class="count" id="count"></div>
+<div class="nav"><button id="prev" aria-label="Previous slide">↑</button><button id="next" aria-label="Next slide">↓</button><button id="theme" aria-label="Toggle theme">◐</button></div>
+<script>
+const slides=[...document.querySelectorAll('.slide')];
+const current=()=>{let best=0,dist=1e9;slides.forEach((s,i)=>{const d=Math.abs(s.getBoundingClientRect().top);if(d<dist){dist=d;best=i}});return best};
+const go=i=>slides[Math.max(0,Math.min(slides.length-1,i))].scrollIntoView({behavior:'smooth'});
+const show=()=>{document.getElementById('count').textContent=(current()+1)+' / '+slides.length};
+document.getElementById('prev').onclick=()=>go(current()-1);
+document.getElementById('next').onclick=()=>go(current()+1);
+document.getElementById('theme').onclick=()=>{const r=document.documentElement;const dark=r.dataset.theme?r.dataset.theme==='dark':matchMedia('(prefers-color-scheme: dark)').matches;r.dataset.theme=dark?'light':'dark'};
+addEventListener('keydown',e=>{if(['ArrowRight','ArrowDown','PageDown',' '].includes(e.key)){e.preventDefault();go(current()+1)}if(['ArrowLeft','ArrowUp','PageUp'].includes(e.key)){e.preventDefault();go(current()-1)}});
+addEventListener('scroll',show,{passive:true});show();
+</script>
+</body>
+</html>
