@@ -1,0 +1,291 @@
+{
+  "description": "Labelled questions for the retrieval evaluation (RAG R5): the documents a good retrieval must return.",
+  "cases": [
+    {
+      "id": "fiscal-year-start",
+      "question": "When does our fiscal year start?",
+      "relevant": [
+        "rule-fiscal-calendar"
+      ]
+    },
+    {
+      "id": "fy2025-dates",
+      "question": "What dates does FY2025 cover?",
+      "relevant": [
+        "rule-fiscal-calendar",
+        "sql-fiscal-year-revenue"
+      ]
+    },
+    {
+      "id": "revenue-definition",
+      "question": "How is revenue defined?",
+      "relevant": [
+        "metric-revenue",
+        "rule-exclude-cancelled-orders"
+      ]
+    },
+    {
+      "id": "finance-revenue",
+      "question": "Why does Finance report a different revenue number?",
+      "relevant": [
+        "metric-revenue-finance-view",
+        "metric-net-revenue"
+      ]
+    },
+    {
+      "id": "net-revenue",
+      "question": "How do refunds affect revenue?",
+      "relevant": [
+        "metric-net-revenue",
+        "rule-returns-and-refunds"
+      ]
+    },
+    {
+      "id": "aov",
+      "question": "How do I calculate average order value?",
+      "relevant": [
+        "metric-average-order-value",
+        "sql-average-order-value"
+      ]
+    },
+    {
+      "id": "active-customer",
+      "question": "What counts as an active customer?",
+      "relevant": [
+        "metric-active-customer"
+      ]
+    },
+    {
+      "id": "repeat-rate",
+      "question": "What share of customers buy more than once?",
+      "relevant": [
+        "metric-repeat-purchase-rate",
+        "sql-repeat-purchase-rate"
+      ]
+    },
+    {
+      "id": "conversion",
+      "question": "How is website conversion measured?",
+      "relevant": [
+        "metric-conversion-rate",
+        "sql-conversion-by-campaign-channel"
+      ]
+    },
+    {
+      "id": "stockout",
+      "question": "What is a stock-out week?",
+      "relevant": [
+        "metric-stockout-week",
+        "sql-stockout-weeks-by-category"
+      ]
+    },
+    {
+      "id": "gross-margin",
+      "question": "How do we calculate gross margin?",
+      "relevant": [
+        "metric-gross-margin"
+      ]
+    },
+    {
+      "id": "cancelled-in-sales",
+      "question": "Should cancelled orders be included in sales figures?",
+      "relevant": [
+        "rule-exclude-cancelled-orders",
+        "metric-revenue"
+      ]
+    },
+    {
+      "id": "online-region",
+      "question": "How do we assign online orders to a region?",
+      "relevant": [
+        "rule-regions-for-orders",
+        "sql-revenue-by-region"
+      ]
+    },
+    {
+      "id": "regions-add-up",
+      "question": "Why don't regional revenue figures add up to the total?",
+      "relevant": [
+        "rule-regions-for-orders",
+        "dq-known-issues"
+      ]
+    },
+    {
+      "id": "tier-count",
+      "question": "How do I count members per loyalty tier?",
+      "relevant": [
+        "rule-current-loyalty-tier",
+        "sql-members-per-tier"
+      ]
+    },
+    {
+      "id": "gold-discount",
+      "question": "What discount does a Gold member get?",
+      "relevant": [
+        "doc-loyalty-programme-guide"
+      ]
+    },
+    {
+      "id": "march-dip",
+      "question": "Why did online revenue drop in March 2026?",
+      "relevant": [
+        "doc-incident-q1-2026-tent-supply"
+      ]
+    },
+    {
+      "id": "late-supplier",
+      "question": "Which supplier delivered tents late in 2026?",
+      "relevant": [
+        "doc-incident-q1-2026-tent-supply",
+        "doc-supplier-handbook"
+      ]
+    },
+    {
+      "id": "spring-sale",
+      "question": "What was the Spring Trail Sale?",
+      "relevant": [
+        "doc-spring-trail-sale-2025-review",
+        "doc-pricing-and-promotions-policy"
+      ]
+    },
+    {
+      "id": "headlamp",
+      "question": "What happened with the Ridgeline headlamp?",
+      "relevant": [
+        "doc-ridgeline-headlamp-recall-2025"
+      ]
+    },
+    {
+      "id": "free-shipping",
+      "question": "When is shipping free?",
+      "relevant": [
+        "doc-shipping-and-fulfilment-policy"
+      ]
+    },
+    {
+      "id": "return-window",
+      "question": "How long do customers have to return items?",
+      "relevant": [
+        "doc-returns-policy"
+      ]
+    },
+    {
+      "id": "boulder-opening",
+      "question": "When did the Boulder store open?",
+      "relevant": [
+        "doc-company-overview",
+        "rule-store-comparisons"
+      ]
+    },
+    {
+      "id": "compare-stores",
+      "question": "How should I compare stores fairly?",
+      "relevant": [
+        "rule-store-comparisons",
+        "metric-revenue-per-square-meter"
+      ]
+    },
+    {
+      "id": "carriers",
+      "question": "Which carriers do we use?",
+      "relevant": [
+        "doc-shipping-and-fulfilment-policy",
+        "sql-delivery-time-by-carrier"
+      ]
+    },
+    {
+      "id": "ticket-target",
+      "question": "What is the target time to close a high priority ticket?",
+      "relevant": [
+        "doc-customer-service-standards"
+      ]
+    },
+    {
+      "id": "data-end",
+      "question": "When does the data end?",
+      "relevant": [
+        "dq-known-issues"
+      ]
+    },
+    {
+      "id": "sales-owner",
+      "question": "Who owns the sales data?",
+      "relevant": [
+        "dq-dataset-ownership"
+      ]
+    },
+    {
+      "id": "monthly-trend-sql",
+      "question": "How do I write a monthly revenue trend query?",
+      "relevant": [
+        "sql-monthly-revenue-trend"
+      ]
+    },
+    {
+      "id": "year-over-year",
+      "question": "How do I compare revenue with last year?",
+      "relevant": [
+        "sql-revenue-year-over-year"
+      ]
+    },
+    {
+      "id": "top-products",
+      "question": "Show me the top 10 products by revenue",
+      "relevant": [
+        "sql-top-products-by-revenue"
+      ]
+    },
+    {
+      "id": "promo-codes",
+      "question": "Which promotion codes did we run?",
+      "relevant": [
+        "doc-pricing-and-promotions-policy",
+        "sql-promotion-usage"
+      ]
+    },
+    {
+      "id": "exec-dashboard",
+      "question": "What is on the executive sales dashboard?",
+      "relevant": [
+        "dashboard-executive-sales"
+      ]
+    },
+    {
+      "id": "sample-database",
+      "question": "Can I use the analytics database for business answers?",
+      "relevant": [
+        "dq-non-business-objects"
+      ]
+    },
+    {
+      "id": "currency",
+      "question": "What currency are amounts in?",
+      "relevant": [
+        "rule-currency-and-rounding"
+      ]
+    },
+    {
+      "id": "tent-season",
+      "question": "When do tents sell best?",
+      "relevant": [
+        "doc-merchandising-calendar"
+      ]
+    },
+    {
+      "id": "limited-fiscal",
+      "question": "When does the fiscal year start?",
+      "relevant": [
+        "rule-fiscal-calendar"
+      ],
+      "role": "limited"
+    },
+    {
+      "id": "limited-prices",
+      "question": "How do product prices change over time?",
+      "relevant": [
+        "dq-product-catalogue"
+      ],
+      "role": "limited"
+    }
+  ]
+}

@@ -61,6 +61,10 @@ prompt_functions = [
 # a test fails if they differ.
 [knowledge]
 embedding_dimensions = 768
+top_k = 5                   # chunks retrieved per question (RAG R5)
+min_similarity = 0.60       # cosine similarity below which a chunk is dropped. For nomic-embed-text: relevant
+                            # matches score 0.649 or more, off-topic questions 0.556 or less (R5 calibration)
+max_context_tokens = 1500   # total size of retrieved chunks given to the model
 
 # Data sources (M29b). DATA_SOURCE picks one (default: sample); an unknown name stops the backend.
 # For each role: the tables it may query, the environment variable holding its read-only database

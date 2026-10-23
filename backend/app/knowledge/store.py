@@ -1,7 +1,8 @@
-"""The knowledge index in Postgres (RAG R4): the only module that writes it.
+"""The knowledge index in Postgres: the only module that touches it.
 
-Uses its own login (knowledge_writer), which can write the knowledge tables and nothing else.
-Each document is written in one transaction, so a failure leaves the previous version in place.
+Index writes it (RAG R4) with its own login, knowledge_writer, which can write the knowledge tables
+and nothing else; each document is written in one transaction, so a failure leaves the previous
+version in place. Reader searches it (RAG R5) with the app's login, which may only read them.
 """
 import re
 
@@ -84,3 +85,25 @@ class Index:
                              unchanged = %s, removed = %s, failed = %s, error = %s WHERE run_id = %s""",
                          (report.added, report.changed, report.unchanged, report.removed, report.failed,
                           "; ".join(report.errors) or None, run_id))
+
+
+class Reader:
+    """Read-only search of the index. Every filter is applied in SQL, not afterwards."""
+
+    def __init__(self, url, schema="knowledge"):
+        if not SCHEMA_NAME.match(schema):
+            raise IndexError(f"Not a valid schema name: {schema!r}")
+        self.url, self.schema = url, schema
+
+    def search(self, vector, model, role, limit, types=None):
+        sql = f"""
+            SELECT c.chunk_id, c.document_id, d.title, d.doc_type, d.owner, d.version, d.source, c.content,
+                   c.token_count, 1 - (c.embedding <=> %(v)s::vector) AS score
+            FROM {self.schema}.chunks c JOIN {self.schema}.documents d USING (document_id)
+            WHERE d.status = 'active' AND %(role)s = ANY(d.access_groups) AND c.embedding_model = %(model)s
+              AND (%(types)s::text[] IS NULL OR d.doc_type = ANY(%(types)s::text[]))
+            ORDER BY c.embedding <=> %(v)s::vector
+            LIMIT %(limit)s"""
+        with psycopg.connect(self.url, connect_timeout=5) as conn:
+            return conn.execute(sql, {"v": vector_literal(vector), "model": model, "role": role,
+                                      "types": list(types) if types else None, "limit": limit}).fetchall()

@@ -93,10 +93,15 @@ def load(path=None):
 
     _keys(doc, "the policy", ("version", "sql", "sources", "knowledge"))
     knowledge = doc["knowledge"]
-    _keys(knowledge, "[knowledge]", ("embedding_dimensions",))
+    _keys(knowledge, "[knowledge]", ("embedding_dimensions", "top_k", "min_similarity", "max_context_tokens"))
+    for name in ("embedding_dimensions", "top_k", "max_context_tokens"):
+        v = knowledge[name]
+        if isinstance(v, bool) or not isinstance(v, int) or v <= 0:
+            raise PolicyError(f"[knowledge] {name} must be a whole number greater than 0.")
+    sim = knowledge["min_similarity"]
+    if isinstance(sim, bool) or not isinstance(sim, (int, float)) or not 0 <= sim < 1:
+        raise PolicyError("[knowledge] min_similarity must be a number from 0 up to (not including) 1.")
     dims = knowledge["embedding_dimensions"]
-    if isinstance(dims, bool) or not isinstance(dims, int) or dims <= 0:
-        raise PolicyError("[knowledge] embedding_dimensions must be a whole number greater than 0.")
     if doc["version"] != 1:
         raise PolicyError("Unsupported policy version.")
 
@@ -159,7 +164,7 @@ def load(path=None):
         sql={k: sql[k] for k in SQL_LIMITS},
         allowed_function_types=frozenset(types), allowed_function_names=frozenset(names),
         blocked_prefixes=prefixes, prompt_functions=tuple(shown), sources=parsed,
-        knowledge={"embedding_dimensions": dims},
+        knowledge={k: knowledge[k] for k in ("embedding_dimensions", "top_k", "min_similarity", "max_context_tokens")},
     )
 
 
