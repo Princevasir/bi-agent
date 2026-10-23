@@ -1,41 +1,46 @@
-"""Guardrail limits, read from the environment at call time so one place controls them.
+"""Guardrail limits: the policy file sets each one, and the environment may only lower it.
 
-Bad values fail loudly rather than silently falling back to a default.
+Read at call time. Bad environment values fail loudly rather than silently falling back.
 """
 import os
 
+from app import policy
 
-def _positive_int(name, default):
-    raw = os.getenv(name, str(default))
+
+def _limit(env_name, key):
+    ceiling = policy.get().sql[key]
+    raw = os.getenv(env_name)
+    if raw is None:
+        return ceiling
     try:
         value = int(raw)
     except ValueError:
-        raise ValueError(f"{name} must be a whole number, got {raw!r}") from None
+        raise ValueError(f"{env_name} must be a whole number, got {raw!r}") from None
     if value <= 0:
-        raise ValueError(f"{name} must be greater than 0, got {value}")
-    return value
+        raise ValueError(f"{env_name} must be greater than 0, got {value}")
+    return min(value, ceiling)   # tighten only (GR-POL-01)
 
 
 def sql_max_rows():
     """Rows returned per query (GR-SQL-04)."""
-    return _positive_int("SQL_MAX_ROWS", 200)
+    return _limit("SQL_MAX_ROWS", "max_rows")
 
 
 def sql_max_result_bytes():
     """Approximate JSON size of the rows returned per query (GR-SQL-04)."""
-    return _positive_int("SQL_MAX_RESULT_BYTES", 1_000_000)
+    return _limit("SQL_MAX_RESULT_BYTES", "max_result_bytes")
 
 
 def sql_timeout_ms():
     """Statement timeout per query."""
-    return _positive_int("SQL_TIMEOUT_MS", 5000)
+    return _limit("SQL_TIMEOUT_MS", "timeout_ms")
 
 
 def sql_max_tables():
     """Table references per query, counting repeats (GR-SQL-02)."""
-    return _positive_int("SQL_MAX_TABLES", 8)
+    return _limit("SQL_MAX_TABLES", "max_tables")
 
 
 def sql_max_depth():
     """How deeply SELECTs may be nested inside other SELECTs (GR-SQL-02)."""
-    return _positive_int("SQL_MAX_DEPTH", 3)
+    return _limit("SQL_MAX_DEPTH", "max_depth")

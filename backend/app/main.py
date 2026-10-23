@@ -26,11 +26,14 @@ from app.llm.base import (
     LLMConfigError, LLMError, LLMRateLimitError, LLMService, LLMTimeoutError,
 )
 from app.llm.budget import TokenBudget
+from app import policy
 from app.logging_setup import configure_logging
 from app.throttle import LoginThrottle
 
 configure_logging()
 logger = logging.getLogger("bi_agent")
+_policy = policy.get()
+logger.info("policy_loaded", extra={"policy_path": str(_policy.path), "policy_sha256": _policy.sha256})
 
 app = FastAPI(title="BI Agent API")
 budget = TokenBudget(int(os.getenv("LLM_TOKEN_BUDGET", "50000")))

@@ -164,6 +164,9 @@ Errors return a generic `{"detail": ...}`: 401 not signed in, 403 access denied,
 
 ## Configuration
 
+The guardrail rules (row, size, time and query-shape limits, the approved SQL functions, and which tables each role may query) live in one reviewed file, `backend/policy/guardrails.toml`. The backend refuses to start if it is malformed and logs its hash at start-up. The `SQL_*` variables below can only lower its limits, never raise them.
+
+
 Set in `.env`; defaults come from `docker-compose.yml`.
 
 | Variable | Default | Meaning |
@@ -176,6 +179,7 @@ Set in `.env`; defaults come from `docker-compose.yml`.
 | `LLM_TIMEOUT_SECONDS` | 20 | Per LLM call |
 | `LLM_MAX_OUTPUT_TOKENS` | 512 | Per LLM call |
 | `LLM_TOKEN_BUDGET` | 50000 | Total tokens per backend process before LLM calls are refused |
+| `GUARDRAIL_POLICY` | `backend/policy/guardrails.toml` | Path to the guardrail policy file |
 | `SQL_MAX_ROWS` | 200 | Rows returned per query; more are never read from the database |
 | `SQL_MAX_RESULT_BYTES` | 1000000 | Approximate size of the rows returned per query; a single larger row is refused |
 | `SQL_TIMEOUT_MS` | 5000 | Statement timeout per query |

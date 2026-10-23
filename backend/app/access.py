@@ -1,9 +1,13 @@
+from app import policy
+
+
 class AccessError(Exception):
     """The role is unknown or not allowed."""
 
 
-ROLE_TABLES = {"analyst": ("orders", "regions"), "limited": ("regions",)}
-ROLE_DB_ENV = {"analyst": "DATABASE_URL", "limited": "DATABASE_URL_LIMITED"}
+# From the policy file (GR-POL-01); a malformed policy stops the import, and so the backend.
+ROLE_TABLES = {name: role.tables for name, role in policy.get().roles.items()}
+ROLE_DB_ENV = {name: role.database_url_env for name, role in policy.get().roles.items()}
 
 
 def tables_for(role):

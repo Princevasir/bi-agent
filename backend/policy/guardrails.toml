@@ -1,0 +1,52 @@
+# Guardrail policy for the BI agent (GR-POL-01).
+#
+# The code enforces these rules; the model never reads this file. Changing it is a security change:
+# update the tests first, run the backend suite and the real-model evaluation, and review the diff.
+# The backend refuses to start if this file is malformed. Environment variables may lower a
+# numeric limit below the value here, never raise it.
+
+version = 1
+
+[sql]
+max_rows = 200              # rows returned per query; more are never read (GR-SQL-04)
+max_result_bytes = 1000000  # JSON size of the rows returned per query (GR-SQL-04)
+timeout_ms = 5000           # statement timeout per query
+max_tables = 8              # table references per query, repeats counted (GR-SQL-02)
+max_depth = 3               # how deeply SELECTs may be nested (GR-SQL-02)
+
+[sql.functions]
+# Only these functions may appear in generated SQL (GR-SQL-01). Typed functions are matched by
+# sqlglot's class name; never add anything that runs SQL from a string, reads files or server
+# settings, sleeps, or builds unbounded values (repeat, lpad, generate_series).
+allowed_types = [
+  # aggregates
+  "Count", "Sum", "Avg", "Min", "Max", "Stddev", "StddevPop", "StddevSamp", "Variance", "VariancePop",
+  "PercentileCont", "PercentileDisc", "ArrayAgg", "GroupConcat", "LogicalAnd", "LogicalOr",
+  # window
+  "RowNumber", "Rank", "DenseRank", "PercentRank", "CumeDist", "Ntile", "Lag", "Lead",
+  "FirstValue", "LastValue", "NthValue",
+  # conditional and casts
+  "Case", "If", "Coalesce", "Nullif", "Greatest", "Least", "Cast", "TryCast",
+  # maths
+  "Abs", "Round", "Ceil", "Floor", "Sqrt", "Pow", "Ln", "Log", "Exp", "Sign",
+  # dates and times
+  "TimestampTrunc", "DateTrunc", "Extract", "TimeToStr", "ToChar", "StrToDate", "StrToTime",
+  "CurrentDate", "CurrentTimestamp", "CurrentTime",
+  # strings
+  "Lower", "Upper", "Trim", "Length", "Concat", "ConcatWs", "Substring", "Replace", "Initcap",
+  "Left", "Right", "StrPosition", "SplitPart",
+]
+# Functions sqlglot does not know, matched by their SQL name.
+allowed_names = ["date_part", "make_date", "age", "to_date", "to_timestamp"]
+# Second check behind the allowlist; no allowed name may start with one of these.
+blocked_prefixes = ["pg_", "lo_", "dblink", "set_config", "current_setting"]
+
+# Which tables each role may query, and which environment variable holds its read-only
+# database login. The database grants are the real enforcement; these must match them.
+[roles.analyst]
+tables = ["orders", "regions"]
+database_url_env = "DATABASE_URL"
+
+[roles.limited]
+tables = ["regions"]
+database_url_env = "DATABASE_URL_LIMITED"

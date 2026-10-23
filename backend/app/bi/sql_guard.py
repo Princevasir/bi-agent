@@ -2,33 +2,16 @@ import sqlglot
 from sqlglot import exp
 from sqlglot.errors import SqlglotError
 
-from app import limits
+from app import limits, policy
 from app.bi.schema import ALLOWED_TABLES
 from app.sqltypes import ValidatedSQL
 
-# GR-SQL-01: functions are allowed only if listed here; widening the list is a security decision.
+# GR-SQL-01: functions are allowed only if the policy file lists them (GR-POL-01).
 # Typed functions are matched by sqlglot's node class name, unknown ones (Anonymous) by their SQL name.
-ALLOWED_FUNCTION_TYPES = frozenset({
-    # aggregates
-    "Count", "Sum", "Avg", "Min", "Max", "Stddev", "StddevPop", "StddevSamp", "Variance", "VariancePop",
-    "PercentileCont", "PercentileDisc", "ArrayAgg", "GroupConcat", "LogicalAnd", "LogicalOr",
-    # window
-    "RowNumber", "Rank", "DenseRank", "PercentRank", "CumeDist", "Ntile", "Lag", "Lead",
-    "FirstValue", "LastValue", "NthValue",
-    # conditional and casts
-    "Case", "If", "Coalesce", "Nullif", "Greatest", "Least", "Cast", "TryCast",
-    # maths
-    "Abs", "Round", "Ceil", "Floor", "Sqrt", "Pow", "Ln", "Log", "Exp", "Sign",
-    # dates and times
-    "TimestampTrunc", "DateTrunc", "Extract", "TimeToStr", "ToChar", "StrToDate", "StrToTime",
-    "CurrentDate", "CurrentTimestamp", "CurrentTime",
-    # strings (no padding or repeat: they build arbitrarily large values)
-    "Lower", "Upper", "Trim", "Length", "Concat", "ConcatWs", "Substring", "Replace", "Initcap",
-    "Left", "Right", "StrPosition", "SplitPart",
-})
-ALLOWED_FUNCTION_NAMES = frozenset({"date_part", "make_date", "age", "to_date", "to_timestamp"})
-# Old blocklist, kept as a second check behind the allowlist.
-BLOCKED_PREFIXES = ("pg_", "lo_", "dblink", "set_config", "current_setting")
+ALLOWED_FUNCTION_TYPES = policy.get().allowed_function_types
+ALLOWED_FUNCTION_NAMES = policy.get().allowed_function_names
+# Second check behind the allowlist.
+BLOCKED_PREFIXES = policy.get().blocked_prefixes
 
 WRITE_NODES = tuple(getattr(exp, n) for n in (
     "Insert", "Update", "Delete", "Merge", "Create", "Drop", "Alter", "Command", "Copy", "Into",
