@@ -47,7 +47,7 @@ The full list of what the project offers today. Keep it current as features land
 - Conversation history per user, readable through `GET /conversations/{id}`.
 
 ### Safety and access control
-- Every generated query passes a validator before it runs: exactly one `SELECT`, allowed tables only, no schema-qualified names, no dangerous functions, no `SELECT INTO` or locking.
+- Every generated query passes a validator before it runs: exactly one `SELECT` (or a `UNION`, `INTERSECT` or `EXCEPT` of them), no write hidden anywhere in it, allowed tables only, no schema-qualified names, only functions from an approved list (so nothing that runs SQL from a string, reads server settings, or builds huge values), no `SELECT INTO` or locking.
 - Queries run through a read-only database login with a 5-second timeout and a 200-row cap.
 - Two roles: `analyst` (orders and regions) and `limited` (regions only), each with its own database login, so the database refuses what the role may not read even if the validator were bypassed.
 - The model only sees the tables the user's role may see.
