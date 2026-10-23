@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app import audit
-from app.access import AccessError, denied_columns, tables_for
+from app.access import AccessError, denied_columns, metric_rules, tables_for
 from app.appdb import User, get_user
 from app.appdb import ping as appdb_ping
 from app.auth import AuthConfigError, authenticate, create_token, current_user
@@ -249,7 +249,8 @@ def ask_sql(body: ChatRequest, request: Request,
             user: User = Depends(signed_in),
             llm: LLMService = Depends(get_llm)):
     sql = generate_sql(body.message, make_generate(llm, request), date.today(), role=user.role)
-    sql = "" if is_no_query(sql) else validate_sql(sql, tables_for(user.role), denied_columns(user.role))
+    sql = "" if is_no_query(sql) else validate_sql(sql, tables_for(user.role), denied_columns(user.role),
+                                                   metric_rules())
     audit_event(request, "ask_sql", 200, question=body.message, sql=sql)
     return {"question": body.message, "sql": sql}
 

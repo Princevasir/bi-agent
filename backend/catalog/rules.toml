@@ -1,0 +1,19 @@
+# Metric rules (GR-ACC-01, GR-ACC-02): checked in code on every generated query for this data.
+# A query that breaks one is sent back to the model once with the message (GR-WF-01).
+
+[[rules]]
+id = "completed-orders-only"
+kind = "requires_filter"
+# Summing or averaging any of these must also refer to filter_on (in WHERE, GROUP BY, CASE or FILTER).
+columns = ["order_items.line_total", "order_items.quantity", "order_items.discount_amount",
+           "orders.total_amount", "orders.subtotal", "orders.discount_amount", "orders.shipping_fee"]
+filter_on = "orders.status"
+message = "Revenue, units and order amounts count completed orders only: join orders and add WHERE orders.status = 'completed', or filter orders.status explicitly if the question is about other orders."
+
+[[rules]]
+id = "no-double-counting"
+kind = "no_fanout"
+# These are per order; joining order_items repeats each order once per item.
+columns = ["orders.total_amount", "orders.subtotal", "orders.discount_amount", "orders.shipping_fee"]
+child_table = "order_items"
+message = "orders.total_amount, subtotal, discount_amount and shipping_fee are per order; after joining order_items each order repeats once per item. Sum order_items.line_total instead, or total orders without joining order_items."

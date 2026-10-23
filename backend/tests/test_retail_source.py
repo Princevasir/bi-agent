@@ -192,3 +192,29 @@ def test_sample_prompt_has_no_retail_hints(monkeypatch):
     import app.bi.text_to_sql as t2s
     monkeypatch.setattr(t2s, "schema_text", lambda role="analyst": "orders(id integer)")
     assert "EXTRACT(QUARTER FROM orders.ordered_at)" not in build_prompt("x", date(2026, 10, 15))
+
+
+@pytest.mark.integration
+def test_missing_status_filter_is_repaired_and_the_number_is_right(retail, loaded):
+    import psycopg
+    bad = ("SELECT SUM(order_items.line_total) AS revenue FROM orders JOIN order_items "
+           "ON orders.order_id = order_items.order_id WHERE orders.ordered_at >= '2025-01-01' "
+           "AND orders.ordered_at < '2026-01-01'")
+    good = bad.replace("WHERE ", "WHERE orders.status = 'completed' AND ")
+    sqls = iter([bad, good])
+    prompts = []
+
+    class Model(RoutedLLM):
+        def generate(self, prompt):
+            prompts.append(prompt)
+            if prompt.startswith("You write PostgreSQL"):
+                return super().generate(prompt).__class__(text=next(sqls), input_tokens=1, output_tokens=1)
+            return super().generate(prompt)
+
+    app.dependency_overrides[get_llm] = lambda: Model("", answer="Revenue.")
+    r = client.post("/ask", json={"message": "What was revenue in 2025?"})
+    assert r.status_code == 200, r.text
+    with psycopg.connect(OWNER_URL) as conn:
+        truth = float(conn.execute(good).fetchone()[0])
+    assert r.json()["sql_repairs"] == 1 and r.json()["rows"] == [[truth]]
+    assert any("orders.status = 'completed'" in p and "previous query failed" in p for p in prompts)

@@ -7,7 +7,7 @@ from pathlib import Path
 import sqlglot
 from sqlglot import exp
 
-from app.access import AccessError, denied_columns, tables_for
+from app.access import AccessError, denied_columns, metric_rules, tables_for
 from app.bi.conversation import MAX_STORED_ROWS, Turn
 from app.bi.service import answer_question, has_data
 from app.bi.sql_guard import SQLRejected, validate_sql
@@ -87,7 +87,8 @@ def score_rows(case, rows, expected=None):
 
 def reference_rows(case):
     """The correct answer on the data as it is now: run the case's reference query."""
-    sql = validate_sql(case["reference_sql"], tables_for(case["role"]), denied_columns(case["role"]))
+    sql = validate_sql(case["reference_sql"], tables_for(case["role"]), denied_columns(case["role"]),
+                       metric_rules())
     return run_readonly(sql, role=case["role"])["rows"]
 
 

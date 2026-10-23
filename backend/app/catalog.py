@@ -49,12 +49,24 @@ class Metric:
     unit: str
 
 
+@dataclass(frozen=True)
+class Rule:
+    """A metric rule checked on generated SQL (GR-ACC-01, GR-ACC-02)."""
+    id: str
+    kind: str                 # requires_filter or no_fanout
+    columns: tuple            # (table, column) pairs the rule is about
+    message: str
+    filter_on: tuple = ()     # requires_filter: (table, column) the query must refer to
+    child_table: str = ""     # no_fanout: the table whose join repeats each row
+
+
 @dataclass
 class Catalog:
     path: Path
     tables: dict
     metrics: dict
     hints: tuple = ()
+    rules: tuple = ()
 
 
 def _read(path):
@@ -105,9 +117,13 @@ def load(path=None):
     files = sorted(path.glob("*.toml"))
     if not files:
         raise CatalogError(f"No catalog files in {path}.")
-    tables, metrics, hints = {}, {}, ()
+    tables, metrics, hints, raw_rules = {}, {}, (), []
     for f in files:
         doc = _read(f)
+        if f.name == "rules.toml":
+            _unknown(doc, {"rules"}, f.name)
+            raw_rules = doc.get("rules", [])
+            continue
         if f.name == "hints.toml":
             _unknown(doc, {"hints"}, f.name)
             raw = doc.get("hints")
@@ -144,7 +160,39 @@ def load(path=None):
         unknown = set(m.tables) - set(tables)
         if unknown:
             raise CatalogError(f"Metric {m.name} uses undescribed tables: {', '.join(sorted(unknown))}")
-    return Catalog(path, tables, metrics, hints)
+    rules = tuple(_rule(r, tables) for r in raw_rules)
+    return Catalog(path, tables, metrics, hints, rules)
+
+
+RULE_KEYS = {"id", "kind", "columns", "message", "filter_on", "child_table"}
+
+
+def _column_ref(ref, tables, where):
+    table, _, column = str(ref).partition(".")
+    if table not in tables or column not in tables[table].columns:
+        raise CatalogError(f"{where}: {ref} is not a described column.")
+    return table, column
+
+
+def _rule(raw, tables):
+    where = f"rules.toml rule {raw.get('id', '?')}"
+    if not isinstance(raw, dict):
+        raise CatalogError(f"{where} must be a table.")
+    _unknown(raw, RULE_KEYS, where)
+    kind = raw.get("kind")
+    if kind not in ("requires_filter", "no_fanout"):
+        raise CatalogError(f"{where}: kind must be requires_filter or no_fanout.")
+    columns = raw.get("columns")
+    if not isinstance(columns, list) or not columns:
+        raise CatalogError(f"{where} needs a list of columns.")
+    rule = Rule(_text(raw.get("id"), f"{where} id"), kind, tuple(_column_ref(c, tables, where) for c in columns),
+                _text(raw.get("message"), f"{where} message"))
+    if kind == "requires_filter":
+        return Rule(**{**rule.__dict__, "filter_on": _column_ref(raw.get("filter_on"), tables, where)})
+    child = raw.get("child_table")
+    if child not in tables:
+        raise CatalogError(f"{where}: child_table {child!r} is not a described table.")
+    return Rule(**{**rule.__dict__, "child_table": child})
 
 
 # ---- the database side ----------------------------------------------------------------------------

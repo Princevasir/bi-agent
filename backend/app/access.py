@@ -50,3 +50,8 @@ def denied_columns(role):
     if not uses_catalog() or r.personal_data:
         return frozenset()
     return _personal_columns()
+
+
+def metric_rules():
+    """The catalog's metric rules for the active source; none for sources without a catalog."""
+    return catalog.get().rules if uses_catalog() else ()

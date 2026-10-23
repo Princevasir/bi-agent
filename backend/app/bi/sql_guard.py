@@ -3,6 +3,7 @@ from sqlglot import exp
 from sqlglot.errors import SqlglotError
 
 from app import limits, policy
+from app.bi import metric_rules
 from app.bi.schema import ALLOWED_TABLES
 from app.sqltypes import ValidatedSQL
 
@@ -127,7 +128,7 @@ def _check_columns(tree, ctes, denied):
                                   PERSONAL_DATA_MESSAGE)
 
 
-def validate_sql(sql: str, allowed_tables = ALLOWED_TABLES, denied_columns=frozenset()) -> ValidatedSQL:
+def validate_sql(sql: str, allowed_tables = ALLOWED_TABLES, denied_columns=frozenset(), rules=()) -> ValidatedSQL:
     try:
         statements = [s for s in sqlglot.parse(sql, read="postgres") if s is not None]
     except SqlglotError as e:
@@ -154,4 +155,5 @@ def validate_sql(sql: str, allowed_tables = ALLOWED_TABLES, denied_columns=froze
     _check_functions(tree)
     _check_structure(tree)
     _check_columns(tree, ctes, denied_columns)
+    metric_rules.check(tree, rules, ctes, lambda reason: SQLRejected(reason, repairable=True))
     return ValidatedSQL(tree.sql(dialect="postgres"))

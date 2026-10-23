@@ -3,7 +3,7 @@ from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from app.access import denied_columns, tables_for
+from app.access import denied_columns, metric_rules, tables_for
 from app.bi.chart import apply_request, build_chart_spec, requested_chart
 from app.bi.grounding import answer_prompt, fallback_answer, is_grounded
 from app.bi.rewrite import rewrite_prompt
@@ -66,7 +66,8 @@ def build_graph(generate):
 
     def check_sql(state):
         try:
-            return {"sql": validate_sql(state["sql"], tables_for(state["role"]), denied_columns(state["role"]))}
+            return {"sql": validate_sql(state["sql"], tables_for(state["role"]), denied_columns(state["role"]),
+                                        metric_rules())}
         except SQLRejected as e:
             if not e.repairable:
                 raise
