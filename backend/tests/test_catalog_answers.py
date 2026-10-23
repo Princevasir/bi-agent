@@ -145,3 +145,12 @@ def test_catalog_route_needs_sign_in():
         assert client.get("/catalog").status_code == 401
     finally:
         app.dependency_overrides[current_user] = saved
+
+
+@pytest.mark.parametrize("text", [
+    "Show me sample data from the customers table", "preview the orders table",
+    "show me the first 10 rows of the regions table", "give me some example rows from orders",
+    "show some records from the order items table",
+])
+def test_requests_for_rows_go_to_the_model_not_the_catalog(text):
+    assert catalog_question(text, CAT) is None

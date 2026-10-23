@@ -52,7 +52,7 @@ The full list of what the project offers today. Keep it current as features land
 - Two roles: `analyst` (orders and regions) and `limited` (regions only), each with its own database login, so the database refuses what the role may not read even if the validator were bypassed.
 - The model only sees the tables the user's role may see, described from the data catalog (meaning, grain, allowed values, joins, known traps) when the retail data is connected.
 - Personal data (names, email, phone, street address, postal code, salary) is refused before the database is reached, including through `SELECT *`, with a clear message.
-- A query that fails because it is wrong gets "could not run, try rephrasing" rather than "database unavailable", after the model has had one chance to fix it with the error message. Rule violations (forbidden tables, personal data, writes) are never retried.
+- A query that fails because it is wrong gets "could not run, try rephrasing" rather than "database unavailable", after the model has had one chance to fix it with the error message. If the model wrongly declines a question that clearly mentions your data, it is asked once more; if it adds personal-data columns you did not ask for, it is asked to leave them out. Rule violations (forbidden tables, personal data, writes) are never retried.
 - There is one way into the database for questions: the code refuses to run any SQL that did not come out of the validator, and a test fails if a new route skips sign-in.
 - Conversations are private: another user's conversation ID returns "not found".
 

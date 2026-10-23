@@ -35,7 +35,13 @@ def repair_text(repair) -> str:
     if not repair:
         return ""
     failed_sql, error = repair
-    return (f"Your previous query failed. Previous query:\n{failed_sql}\nError: {error}\n"
+    if is_no_query(failed_sql):
+        # Never repeat the word NO_QUERY here: it primed the 7B model to decline again (0 of 6 times
+        # it wrote SQL with it, 6 of 6 without). Change requests never get a second opinion anyway.
+        return "This message is a question about the data above: answer it with a SELECT.\n\n"
+    # The failed query goes back inside a sql fence, the format the model writes: without it the
+    # 7B model declined some repairs (2 of 3 repaired plain, 3 of 3 fenced, 24 Oct 2026).
+    return (f"Your previous query failed. Previous query:\n```sql\n{failed_sql}\n```\nError: {error}\n"
             "Write a corrected query that answers the same question.\n\n")
 
 

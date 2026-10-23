@@ -49,3 +49,8 @@ def sql_repair_attempts():
 def sql_max_depth():
     """How deeply SELECTs may be nested inside other SELECTs (GR-SQL-02)."""
     return _limit("SQL_MAX_DEPTH", "max_depth")
+
+
+def decline_retries():
+    """Second opinions when the model declines a question that clearly mentions the data."""
+    return _limit("DECLINE_RETRIES", "decline_retries", minimum=0)

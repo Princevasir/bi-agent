@@ -15,6 +15,8 @@ METRICS = [r"\b(which|what|list|show)\b.*\bmetrics?\b",
            r"\bhow (is|are) (\w+ ){1,3}(defined|calculated|computed|measured)\b", r"\bdefinition of\b"]
 EXPLAIN = [r"\bwhat (does|do) (the )?(?P<x>[a-z_ ]+?)( column| field)? mean\b",
            r"^\s*what is (the )?(?P<x>[a-z_ ]+?)( column| field)?\s*\??\s*$"]
+# "Show me sample data from customers" wants rows, not a description: that is a data question.
+WANTS_ROWS = r"\b(samples?|examples?|preview|records|rows|first \d+|top \d+|some data|data from)\b"
 SAMPLE_TABLES = {"orders": ["id", "order_date", "region_id", "status", "amount"], "regions": ["id", "name"]}
 
 
@@ -32,7 +34,12 @@ def _names(cat):
 
 def _forms(name):
     spaced = name.replace("_", " ")
-    singular = spaced[:-1] if spaced.endswith("s") else spaced
+    if spaced.endswith("ies"):
+        singular = spaced[:-3] + "y"
+    elif spaced.endswith("s"):
+        singular = spaced[:-1]
+    else:
+        singular = spaced
     return {spaced, singular}
 
 
@@ -46,6 +53,8 @@ def _mentioned_table(text, tables):
 def catalog_question(text, cat):
     """(intent, subject) for a question about the data, or None for a question for the model."""
     text = str(text).lower().strip()
+    if re.search(WANTS_ROWS, text):
+        return None
     names = {**_known(), **_names(cat)}
     if any(re.search(p, text) for p in METRICS):
         return "metrics", None
@@ -112,3 +121,34 @@ def answer(intent, cat, metrics):
     rows = [[m["name"], m["definition"], m["description"]] for m in metrics]
     return _result(["metric", "definition", "description"], rows,
                    f"{len(rows)} governed metric{'s are' if len(rows) != 1 else ' is'} defined for your data.")
+
+
+# ---- second opinions on declines ----------------------------------------------------------------------------
+CHANGE_WORDS = re.compile(r"\b(delete|remove|drop|truncate|update|change|modify|alter|insert|add|set|rename|"
+                          r"create|replace|ignore|overwrite|wipe)\b")
+PERSONAL_WORDS = re.compile(r"\b(e-?mails?|phones?|phone numbers?|names?|first names?|last names?|surnames?|"
+                            r"address(es)?|street|postal|post ?codes?|zip|salar(y|ies)|contact details?)\b")
+GENERIC_COLUMNS = {"name", "city", "code", "status", "channel", "amount"}
+
+
+def _vocabulary():
+    """Table, column and metric names, as people would type them."""
+    words = set()
+    for table, columns in _known().items():
+        words |= _forms(table)
+        words |= {c.replace("_", " ") for c in columns if len(c) >= 5 and c not in GENERIC_COLUMNS}
+    words |= {m.replace("_", " ") for m in catalog.get().metrics}
+    return words
+
+
+def worth_a_second_opinion(text):
+    """True when a declined message clearly mentions the data and does not ask to change anything."""
+    text = str(text).lower()
+    if CHANGE_WORDS.search(text):
+        return False
+    return any(re.search(rf"\b{re.escape(w)}s?\b", text) for w in _vocabulary())
+
+
+def asks_for_personal_data(text):
+    """True when the user explicitly asks for names, contact details, addresses or salaries."""
+    return bool(PERSONAL_WORDS.search(str(text).lower()))

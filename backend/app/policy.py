@@ -15,8 +15,9 @@ from pathlib import Path
 from sqlglot import exp
 
 DEFAULT_PATH = Path(__file__).resolve().parents[1] / "policy" / "guardrails.toml"
-SQL_LIMITS = ("max_rows", "max_result_bytes", "timeout_ms", "max_tables", "max_depth", "repair_attempts")
-MAY_BE_ZERO = {"repair_attempts"}
+SQL_LIMITS = ("max_rows", "max_result_bytes", "timeout_ms", "max_tables", "max_depth", "repair_attempts",
+              "decline_retries")
+MAY_BE_ZERO = {"repair_attempts", "decline_retries"}
 TABLE_NAME = re.compile(r"^[a-z_][a-z0-9_]*$")
 ENV_NAME = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
