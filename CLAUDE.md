@@ -86,6 +86,9 @@ Code changes need `--build`; `.env` or compose environment changes need the cont
 
 ## Gotchas already hit
 
+- Docker Compose gives shell variables priority over `.env`. If `.env` was loaded with `set -a; source .env` before starting a session, a changed `.env` value is ignored; start Compose with `env -u NAME docker compose up -d` or a fresh terminal.
+- Before appending to `.env`, make sure it ends with a newline, or the new line is glued onto the last variable (it once corrupted `JWT_SECRET`). Back it up first and never print its contents.
+
 - Postgres evaluates constant expressions such as `1 / 0` while planning, even inside `CASE`; a test that needs an error on a later row must make it depend on the row (`1 / (g - g)`).
 - New limits are read in `app/limits.py`; add each one to `docker-compose.yml` too, or a value in `.env` never reaches the container.
 
