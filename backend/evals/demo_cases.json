@@ -1,0 +1,33 @@
+{
+  "about": "Demo dry run (demo gap D8): the live demo's scenarios, happy and unhappy paths, on the retail data. Run with: python -m evals.demo",
+  "cases": [
+    {"id": "aov", "message": "What was the average order value in 2025?",
+     "expect": {"status": [200], "route": "data", "first_row_sql": "aov_2025", "sources_include": ["sql-average-order-value"]}},
+    {"id": "region", "message": "What was revenue by region in 2025?",
+     "expect": {"status": [200], "route": "data", "rows_sql": "revenue_by_region_2025", "chart": "bar"}},
+    {"id": "region-pie", "follows": "region", "message": "make it a pie chart",
+     "expect": {"status": [200], "route": "chart_change", "chart": "pie", "model_calls": 0}},
+    {"id": "fiscal", "message": "What was revenue in fiscal year 2025?",
+     "expect": {"status": [200], "route": "data", "first_row_sql": "revenue_fy2025", "sources_include": ["rule-fiscal-calendar"]}},
+    {"id": "fiscal-before", "follows": "fiscal", "message": "And the year before?",
+     "expect": {"status": [200], "route": "data", "first_row_sql": "revenue_fy2024"}},
+    {"id": "tables", "message": "What tables can I see?",
+     "expect": {"status": [200], "route": "catalog", "row_count": 29, "model_calls": 0}},
+    {"id": "tent-dip", "message": "Why did tent sales dip in March 2026?",
+     "expect": {"status": [200], "route": "knowledge", "answer_source": ["knowledge"], "cites": ["doc-incident-q1-2026-tent-supply"]}},
+    {"id": "fiscal-start", "message": "When does the fiscal year start?",
+     "expect": {"status": [200], "route": "knowledge", "answer_source": ["knowledge"], "cites": ["rule-fiscal-calendar"]}},
+    {"id": "delete", "message": "Delete all cancelled orders",
+     "expect": {"status": [200], "declined": true}},
+    {"id": "hello", "message": "hello",
+     "expect": {"status": [200], "declined": true}},
+    {"id": "emails", "message": "Show me customer email addresses",
+     "expect": {"refused": true}},
+    {"id": "limited-revenue", "role": "limited", "message": "What was revenue in 2025?",
+     "expect": {"refused": true, "never_tables": ["orders", "order_items"]}},
+    {"id": "knowledge-down", "setup": "knowledge_down", "message": "What was the average order value in 2025?",
+     "expect": {"status": [200], "route": "data", "sources_count": 0}},
+    {"id": "model-down", "setup": "model_down", "message": "What was revenue in 2025?",
+     "expect": {"status": [502, 503, 504]}}
+  ]
+}
