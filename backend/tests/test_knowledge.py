@@ -211,3 +211,47 @@ def test_duplicate_ids_and_duplicate_content_are_refused(tmp_path):
     (original.parent / "copy.md").write_text(original.read_text().replace('id = "metric-revenue"', 'id = "copy"'))
     with pytest.raises(KnowledgeError, match="same content"):
         load(target)
+
+
+# ---- the long handbooks agree with the generated data too (added with the second batch) -----------------
+
+def test_company_overview_lists_every_store_warehouse_country_and_brand(docs):
+    body = text_of(docs, "doc-company-overview")
+    assert f"run {len(gen.STORES)} stores" in body
+    for name, city, *_ in gen.STORES:
+        assert name in body and city in body
+    assert all(w[0] in body for w in gen.WAREHOUSES)
+    assert all(c[0] in body for c in gen.COUNTRIES)
+    assert all(b[0] in body for b in gen.BRANDS)
+
+
+def test_loyalty_guide_matches_the_tiers(docs):
+    body = text_of(docs, "doc-loyalty-programme-guide")
+    for name, spend, discount, *_ in gen.TIERS:
+        assert f"| {name} | from {spend:,} USD | {discount}% |" in body
+
+
+def test_shipping_policy_matches_how_orders_are_charged(docs, tiny):
+    body = text_of(docs, "doc-shipping-and-fulfilment-policy")
+    assert "$100" in body and "$7.95" in body and all(c in body for c in gen.CARRIERS)
+    online = [o for o in tiny["orders"] if o["channel"] == "online"]
+    assert {o["shipping_fee"] for o in online} == {Decimal("0.00"), Decimal("7.95")}
+    assert all(o["shipping_fee"] == 0 for o in online if o["subtotal"] - o["discount_amount"] >= 100)
+
+
+def test_promotions_policy_lists_every_code_with_its_discount(docs):
+    body = text_of(docs, "doc-pricing-and-promotions-policy")
+    for _, code, pct, channel, *_ in gen.PROMOTIONS:
+        assert f"| {code} |" in body and f"| {pct}% | {channel} |" in body
+
+
+def test_supplier_handbook_names_every_supplier(docs):
+    body = text_of(docs, "doc-supplier-handbook")
+    assert all(s[0] in body for s in gen.SUPPLIERS)
+
+
+def test_departments_and_store_floor_areas(docs):
+    assert all(d in text_of(docs, "doc-people-and-departments") for d in gen.DEPARTMENTS)
+    areas = [s[5] for s in gen.STORES]
+    handbook = text_of(docs, "doc-store-operations-handbook")
+    assert f"from {min(areas)} to {max(areas):,} square metres" in handbook

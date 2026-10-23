@@ -97,7 +97,8 @@ th{background:var(--surface)}
 <tr><td>Business use case</td><td>Trailhead Outfitters knowledge pack; fiscal year February to January (FY2025 = 1 Feb 2025 to 31 Jan 2026)</td><td>Fits the generated data exactly, so every document can be tested against it</td></tr>
 </tbody></table></div>
 
-<h2>Knowledge pack (about 38 documents)</h2>
+<h2>Knowledge pack (64 documents)</h2>
+<p class="key">Expanded on 24 October 2026 at your request with 25 more documents, including long handbooks with several sections (company overview with all 12 stores, store operations, loyalty programme, shipping and fulfilment, returns, pricing and promotions with every code, merchandising calendar, supplier handbook, customer service standards, marketing playbook, a Q2 2026 business review, an analyst guide, people and departments), 5 more metrics (delivery time, ticket resolution time, revenue per square metre, campaign revenue, retention), 2 more rules (store comparisons, currency and rounding) and 5 more validated SQL examples. Facts are checked against the generator (stores, warehouses, countries, brands, tiers and discounts, shipping threshold and fee, promotion codes, suppliers, departments, floor areas); two deliberately broken facts were caught by the tests. Backend 817 passed.</p>
 <ul>
 <li><b>Metrics:</b> revenue (authoritative, Sales Analytics) and a conflicting Finance view, net revenue, average order value, order count, units sold, return rate, active customer, repeat-purchase rate, conversion rate, stock-out week, gross margin.</li>
 <li><b>Rules (versioned):</b> exclude cancelled orders (v2, superseding a v1 kept on purpose), returns and refunds, fiscal calendar, reporting periods, regions for orders, current loyalty tier.</li>
