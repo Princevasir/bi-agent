@@ -79,6 +79,7 @@ The full list of what the project offers today. Keep it current as features land
 - `GET /health` (liveness) and `GET /ready` (both databases reachable).
 - No runaway loops: every question stops within 15 workflow steps (`max_steps` in the policy file; the longest normal path takes 13), on top of the one-repair and one-second-opinion counters. A stopped run returns 422 with a plain message and is audited as `step_limit`.
 - Shared state for more than one backend instance: with `STATE_STORE=postgres` (the Compose default) conversations, sign-in lockouts and token spending live in `appdb` (`db/init/09_shared_state.sql`), so a follow-up can be answered by any instance and survives a backend restart.
+- An MCP server (`app/mcp_server.py`) with two tools, `ask_data` and `search_knowledge`, so Claude Desktop or Claude Code can use the BI Agent; it calls the API as a signed-in user, so every guardrail still applies.
 - Retry and circuit breaker for each model provider: one retry with a short pause for transient failures, and after three failures in a row the provider is skipped for a minute, so the fallback answers at once or users get a clear "temporarily unavailable" message instead of waiting on a dead service (logged as `llm_retry`, `llm_circuit_open`, `llm_circuit_closed`).
 - Optional fast mode with a fallback: `LLM_PROVIDER=groq` and `LLM_FALLBACK_PROVIDER=ollama` answer a retail question in about 2 seconds on Groq, and switch to the local model when Groq fails or is rate-limited (logged as `llm_fallback`).
 - Timeouts, an output-token cap and a rolling hourly token budget for model calls, in total and per user, which refills on its own ("The question limit for this hour has been reached" when used up); model and database failures return clear, generic errors.
@@ -193,6 +194,7 @@ All routes except the first four need `Authorization: Bearer <token>` from `/aut
 | POST | `/ask/sql` | Generate and validate SQL for a question without running it (422 if the validator rejects it) |
 | GET | `/conversations/{id}` | Turns of one of your own conversations |
 | GET | `/schema` | Tables and columns your role can see |
+| GET | `/knowledge/search?q=` | The business documents closest to `q` that your role may read (used by the MCP tool) |
 | GET | `/catalog` | The data catalog your role can see: tables, columns, keys, relationships, descriptions, metrics |
 | GET | `/db/ping` | Database check as your role |
 | POST | `/chat` | Plain LLM reply (no data access) |
@@ -259,6 +261,30 @@ python3 -m venv .venv
 Tests never call the real LLM: they use a scripted fake model (`backend/tests/routed_llm.py`). Integration tests connect to the Compose database on host port 5433.
 
 The evaluation dataset lives in `backend/evals/cases.json` and the scoring code in `backend/evals/harness.py`; `tests/test_evals.py` checks that every expected answer is right and that the scoring rules behave.
+
+### Using the BI Agent from Claude (MCP)
+
+`backend/app/mcp_server.py` exposes the BI Agent as an MCP server with two tools: `ask_data` (a question in plain English; returns the answer, SQL, up to 20 rows, sources and a conversation ID for follow-ups) and `search_knowledge` (the closest business documents with excerpts). It signs in to the running backend as a normal user, so roles, guardrails, budgets and the audit trail all apply; the MCP client never reaches the database or the model directly.
+
+Set it up once (`pip install -r requirements-mcp.txt` in `backend/.venv`; already included in `requirements-dev.txt`), then add it to Claude Code:
+
+```bash
+claude mcp add bi-agent \
+  -e PYTHONPATH="$PWD/backend" -e BI_AGENT_URL=http://localhost:8000 \
+  -e BI_AGENT_USERNAME=demo-analyst -e BI_AGENT_PASSWORD='<the demo password>' \
+  -- "$PWD/backend/.venv/bin/python" -m app.mcp_server
+```
+
+or to Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{"mcpServers": {"bi-agent": {
+  "command": "/full/path/to/backend/.venv/bin/python", "args": ["-m", "app.mcp_server"],
+  "env": {"PYTHONPATH": "/full/path/to/backend", "BI_AGENT_URL": "http://localhost:8000",
+          "BI_AGENT_USERNAME": "demo-analyst", "BI_AGENT_PASSWORD": "<the demo password>"}}}}
+```
+
+The password sits in your local client configuration, so use a dedicated BI Agent user. If the backend is down or a question is rejected, the tool returns the plain reason as a tool error.
 
 ### Demo dry run
 

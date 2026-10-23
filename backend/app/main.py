@@ -6,7 +6,7 @@ from dataclasses import asdict
 from datetime import date
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -313,6 +313,16 @@ def ask(body: AskRequest, request: Request,
                     sources=[s["document_id"] for s in out["sources"]],
                     steps=[f"{t['agent']}.{t['step']}" for t in out["trace"]])
     return {**out, "conversation_id": cid}
+
+
+@app.get("/knowledge/search")
+def knowledge_search(request: Request, q: str = Query(min_length=1, max_length=500),
+                     user: User = Depends(signed_in), knowledge=Depends(get_knowledge)):
+    """The business documents closest to q that the user's role may read (demo gap D10, for the MCP tool)."""
+    hits = knowledge(q, user.role)
+    audit_event(request, "knowledge_search", 200, query=q, sources=[h.document_id for h in hits])
+    return {"hits": [{"document_id": h.document_id, "title": h.title, "doc_type": h.doc_type, "owner": h.owner,
+                      "version": h.version, "score": h.score, "content": h.content} for h in hits]}
 
 
 @app.get("/catalog")

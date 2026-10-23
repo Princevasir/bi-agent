@@ -289,6 +289,17 @@ svg text{font-family:inherit}
   </div>
 </div></section>
 
+<!-- 11b -->
+<section class="slide"><div class="inner">
+  <p class="kicker">MCP integration</p>
+  <h2>The BI Agent as tools for any MCP client</h2>
+  <div class="grid g2">
+    <div class="card"><h3>ask_data</h3><p>A business question in plain English; returns the grounded answer, the SQL, up to 20 rows, the sources and a conversation ID for follow-ups.</p></div>
+    <div class="card"><h3>search_knowledge</h3><p>The business documents closest to a query (definitions, rules, policies, incident reports), filtered by the user's role.</p></div>
+  </div>
+  <div class="card" style="margin-top:16px"><h3>Same guardrails, no shortcuts</h3><p>The MCP server signs in to the BI Agent's API as a normal user. Roles, the SQL validator, read-only logins, budgets and the audit trail all apply; the MCP client never reaches the database or the model. Failures (backend down, query rejected, wrong password) come back as plain tool errors. Tested end to end with a real MCP client over stdio: both tools, a follow-up, and a declined delete request.</p></div>
+</div></section>
+
 <!-- 12 -->
 <section class="slide"><div class="inner">
   <p class="kicker">Live demo</p>
@@ -372,7 +383,7 @@ open http://localhost:8501</pre>
       <tr><td>D7</td><td>Answers from knowledge alone, with citations</td><td>RAG adds real value</td><td><span class="tag t-ok">done</span></td></tr>
       <tr><td>D8</td><td>Automated dry run of the demo scenarios on retail data</td><td>5+ test scenarios; break your own system</td><td><span class="tag t-ok">done</span></td></tr>
       <tr><td>D9</td><td>Retry with backoff and a circuit breaker for the models</td><td>Retry logic, fallbacks, circuit breakers</td><td><span class="tag t-ok">done</span></td></tr>
-      <tr><td>D10</td><td>MCP server with two tools</td><td>Optional (RAG already chosen)</td><td><span class="tag t-brand">optional</span></td></tr>
+      <tr><td>D10</td><td>MCP server with two tools</td><td>Optional (RAG already chosen)</td><td><span class="tag t-ok">done</span></td></tr>
       <tr><td>D11</td><td>Shared state for more than one backend instance</td><td>Scale thinking: 10x load</td><td><span class="tag t-ok">done</span></td></tr>
     </tbody>
   </table></div>
