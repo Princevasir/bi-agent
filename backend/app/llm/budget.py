@@ -32,9 +32,10 @@ class MemoryLedger:
             while self._spent and self._spent[0][0] <= cutoff:
                 self._spent.popleft()
 
-    def entries(self, since, user=None):
+    def entries(self, since, until, user=None):
         with self._lock:
-            return [(at, t) for at, u, t in self._spent if at > since and (user is None or u == user)]
+            return [(at, t) for at, u, t in self._spent
+                    if since < at <= until and (user is None or u == user)]
 
 
 class TokenBudget:
@@ -61,16 +62,17 @@ class TokenBudget:
         now = self._clock()
         cutoff = now - self.window
         self.ledger.prune(cutoff)
-        self._over(self.ledger.entries(cutoff), self.limit, now)
+        # Only spending inside [now - window, now] counts: another instance's clock may run ahead.
+        self._over(self.ledger.entries(cutoff, now), self.limit, now)
         if user is not None and self.per_user is not None:
-            self._over(self.ledger.entries(cutoff, user), self.per_user, now)
+            self._over(self.ledger.entries(cutoff, now, user), self.per_user, now)
 
     def record(self, tokens: int, user=None) -> None:
         self.ledger.add(self._clock(), user, tokens)
 
     def used(self, user=None) -> int:
         now = self._clock()
-        return sum(t for _, t in self.ledger.entries(now - self.window, user))
+        return sum(t for _, t in self.ledger.entries(now - self.window, now, user))
 
 
 def from_env():

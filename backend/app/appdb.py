@@ -143,9 +143,9 @@ class PgTokenLedger:
     def prune(self, cutoff):
         _run("DELETE FROM token_usage WHERE spent_at <= %s", (cutoff,))
 
-    def entries(self, since, user=None):
+    def entries(self, since, until, user=None):
         if user is None:
-            return _run("SELECT spent_at, tokens FROM token_usage WHERE spent_at > %s ORDER BY spent_at",
-                        (since,), fetch=True)
-        return _run("SELECT spent_at, tokens FROM token_usage WHERE spent_at > %s AND username = %s ORDER BY spent_at",
-                    (since, user), fetch=True)
+            return _run("SELECT spent_at, tokens FROM token_usage WHERE spent_at > %s AND spent_at <= %s "
+                        "ORDER BY spent_at", (since, until), fetch=True)
+        return _run("SELECT spent_at, tokens FROM token_usage WHERE spent_at > %s AND spent_at <= %s "
+                    "AND username = %s ORDER BY spent_at", (since, until, user), fetch=True)

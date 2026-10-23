@@ -161,3 +161,18 @@ def test_an_unknown_store_is_refused(monkeypatch):
     monkeypatch.setenv("STATE_STORE", "redis")
     with pytest.raises(ValueError, match="STATE_STORE"):
         conversation.from_env()
+
+
+def test_spending_recorded_after_now_is_not_counted(clean):
+    # Another instance's clock may run ahead; only spending inside [now - window, now] counts.
+    clock = Clock()
+    ahead = TokenBudget(1000, clock=lambda: clock.now + 600, ledger=appdb.PgTokenLedger())
+    ahead.record(5000, user=f"{PREFIX}-skewed")
+    TokenBudget(1000, clock=clock, ledger=appdb.PgTokenLedger()).check(user=f"{PREFIX}-other")
+
+
+def test_the_memory_ledger_also_ignores_the_future():
+    clock = Clock()
+    ledger = budget.MemoryLedger()
+    TokenBudget(100, clock=lambda: clock.now + 600, ledger=ledger).record(500)
+    TokenBudget(100, clock=clock, ledger=ledger).check()
