@@ -49,6 +49,7 @@ class Policy:
     blocked_prefixes: tuple
     prompt_functions: tuple
     sources: dict
+    knowledge: dict
 
     @property
     def roles(self):
@@ -90,7 +91,12 @@ def load(path=None):
     except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as e:
         raise PolicyError(f"The policy file {path} could not be read: {e}") from e
 
-    _keys(doc, "the policy", ("version", "sql", "sources"))
+    _keys(doc, "the policy", ("version", "sql", "sources", "knowledge"))
+    knowledge = doc["knowledge"]
+    _keys(knowledge, "[knowledge]", ("embedding_dimensions",))
+    dims = knowledge["embedding_dimensions"]
+    if isinstance(dims, bool) or not isinstance(dims, int) or dims <= 0:
+        raise PolicyError("[knowledge] embedding_dimensions must be a whole number greater than 0.")
     if doc["version"] != 1:
         raise PolicyError("Unsupported policy version.")
 
@@ -153,6 +159,7 @@ def load(path=None):
         sql={k: sql[k] for k in SQL_LIMITS},
         allowed_function_types=frozenset(types), allowed_function_names=frozenset(names),
         blocked_prefixes=prefixes, prompt_functions=tuple(shown), sources=parsed,
+        knowledge={"embedding_dimensions": dims},
     )
 
 

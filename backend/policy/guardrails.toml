@@ -57,6 +57,11 @@ prompt_functions = [
   "left", "right", "strpos", "split_part",
 ]
 
+# The knowledge index (RAG). The size must match knowledge.chunks.embedding in db/init/08_knowledge.sql;
+# a test fails if they differ.
+[knowledge]
+embedding_dimensions = 768
+
 # Data sources (M29b). DATA_SOURCE picks one (default: sample); an unknown name stops the backend.
 # For each role: the tables it may query, the environment variable holding its read-only database
 # login, and whether it may read columns the catalog flags as personal data. The database grants
