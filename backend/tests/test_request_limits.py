@@ -122,7 +122,8 @@ def test_the_api_refuses_a_rate_limited_user_with_retry_after(monkeypatch, fake_
     assert r.status_code == 429 and int(r.headers["Retry-After"]) >= 1
     assert "too many questions" in r.json()["detail"].lower()
     event = audit_events[-1]
-    assert event["event"] == "rate_limited" and event["detail"] == {"guardrail": "GR-COST-01", "reason": "minute"}
+    assert event["event"] == "rate_limited" and event["detail"]["guardrail"] == "GR-COST-01"
+    assert event["detail"]["reason"] == "minute" and "latency_ms" in event["detail"]       # GR-OBS-01 fields too
 
 
 def test_the_api_refuses_a_second_question_while_one_is_running(monkeypatch, fake_model, audit_events):
@@ -131,7 +132,8 @@ def test_the_api_refuses_a_second_question_while_one_is_running(monkeypatch, fak
     with running.hold("test-analyst"):
         r = client.post("/ask", json={"message": "hello"})
     assert r.status_code == 429 and r.json()["detail"] == "Please wait for your previous question to finish."
-    assert audit_events[-1]["detail"] == {"guardrail": "GR-COST-03", "reason": "concurrency"}
+    detail = audit_events[-1]["detail"]
+    assert detail["guardrail"] == "GR-COST-03" and detail["reason"] == "concurrency" and "latency_ms" in detail
 
 
 def test_the_api_explains_the_daily_quota(monkeypatch, fake_model):

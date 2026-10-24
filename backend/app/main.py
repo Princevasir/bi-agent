@@ -64,6 +64,7 @@ async def add_request_id(request: Request, call_next):
     request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
     request.state.request_id = request_id
     start = time.perf_counter()
+    request.state.started = start                    # GR-OBS-01: latency in every audit entry
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
     ms = (time.perf_counter() - start) * 1000
@@ -87,6 +88,9 @@ def signed_in(request: Request, user: User = Depends(current_user)):
 
 def audit_event(request, event, status_code, username=None, **detail):
     user = getattr(request.state, "user", None)
+    started = getattr(request.state, "started", None)
+    if started is not None:
+        detail["latency_ms"] = round((time.perf_counter() - started) * 1000, 1)
     audit.record(
         event,
         request_id=_rid(request),
@@ -103,14 +107,17 @@ async def llm_error_handler(request: Request, exc: LLMError):
         if isinstance(exc, cls):
             logger.warning("request_id=%s llm_error=%s detail=%s",
                            _rid(request), type(exc).__name__, exc)
-            audit_event(request, "llm_error", status, error=type(exc).__name__)
+            decision = ({"guardrail": "token-budget", "category": "cost"} if isinstance(exc, LLMBudgetError) else
+                        {"guardrail": "GR-WF-02", "category": "availability"} if isinstance(exc, LLMUnavailableError)
+                        else {})
+            audit_event(request, "llm_error", status, error=type(exc).__name__, **decision)
             return JSONResponse(status_code=status, content={"detail": message})
 
 
 @app.exception_handler(ResultTooLargeError)
 async def result_too_large_handler(request: Request, exc: ResultTooLargeError):
     logger.warning("result_too_large", extra={"request_id": _rid(request)})
-    audit_event(request, "result_too_large", 422)
+    audit_event(request, "result_too_large", 422, guardrail="GR-SQL-04", category="result_size")
     return JSONResponse(status_code=422,
                         content={"detail": "The result is too large to show. Try a narrower question."})
 
@@ -138,14 +145,15 @@ async def db_error_handler(request: Request, exc: DBError):
     # GR-PRIV-02: the class only; Postgres's message can quote values from the data
     logger.warning("db_error", extra={"request_id": _rid(request), "error": type(exc).__name__,
                                       "cause": type(exc.__cause__).__name__ if exc.__cause__ else None})
-    audit_event(request, "db_error", status, error=type(exc).__name__)
+    decision = {"guardrail": "statement-timeout", "category": "timeout"} if isinstance(exc, DBTimeoutError) else {}
+    audit_event(request, "db_error", status, error=type(exc).__name__, **decision)
     return JSONResponse(status_code=status, content={"detail": message})
 
 
 @app.exception_handler(SQLRejected)
 async def sql_rejected_handler(request: Request, exc: SQLRejected):
     logger.warning("request_id=%s sql_rejected=%s", _rid(request), exc)
-    audit_event(request, "sql_rejected", 422, reason=str(exc))
+    audit_event(request, "sql_rejected", 422, reason=str(exc), guardrail=exc.guardrail, category=exc.category)
     return JSONResponse(status_code=422,
                         content={"detail": exc.user_message or "The generated query was rejected."})
 
@@ -153,7 +161,7 @@ async def sql_rejected_handler(request: Request, exc: SQLRejected):
 @app.exception_handler(DeadlineExceeded)
 async def deadline_handler(request: Request, exc: DeadlineExceeded):
     logger.warning("deadline_exceeded", extra={"request_id": _rid(request), "guardrail": "GR-WF-02"})
-    audit_event(request, "deadline_exceeded", 504, guardrail="GR-WF-02", reason=str(exc))
+    audit_event(request, "deadline_exceeded", 504, guardrail="GR-WF-02", category="workflow", reason=str(exc))
     return JSONResponse(status_code=504,
                         content={"detail": "That question took too long to answer. Please try a simpler question."})
 
@@ -161,14 +169,14 @@ async def deadline_handler(request: Request, exc: DeadlineExceeded):
 @app.exception_handler(StepLimitError)
 async def step_limit_handler(request: Request, exc: StepLimitError):
     logger.warning("workflow step limit reached", extra={"request_id": _rid(request), "detail": str(exc)})
-    audit_event(request, "step_limit", 422, reason=str(exc))
+    audit_event(request, "step_limit", 422, guardrail="step-limit", category="workflow", reason=str(exc))
     return JSONResponse(status_code=422,
                         content={"detail": "I could not answer that within the step limit. Try asking more simply."})
 
 
 @app.exception_handler(RateLimited)
 async def rate_limited_handler(request: Request, exc: RateLimited):
-    audit_event(request, "rate_limited", 429, guardrail="GR-COST-01", reason=exc.reason)
+    audit_event(request, "rate_limited", 429, guardrail="GR-COST-01", category="rate", reason=exc.reason)
     wait = f"{exc.retry_after} seconds" if exc.retry_after < 120 else f"{math.ceil(exc.retry_after / 60)} minutes"
     return JSONResponse(status_code=429, headers={"Retry-After": str(exc.retry_after)},
                         content={"detail": f"You have asked too many questions in the last {exc.reason}. "
@@ -177,7 +185,7 @@ async def rate_limited_handler(request: Request, exc: RateLimited):
 
 @app.exception_handler(Busy)
 async def busy_handler(request: Request, exc: Busy):
-    audit_event(request, "rate_limited", 429, guardrail="GR-COST-03", reason="concurrency")
+    audit_event(request, "rate_limited", 429, guardrail="GR-COST-03", category="rate", reason="concurrency")
     return JSONResponse(status_code=429, content={"detail": "Please wait for your previous question to finish."})
 
 
@@ -197,7 +205,7 @@ async def auth_config_handler(request: Request, exc: AuthConfigError):
 @app.exception_handler(AccessError)
 async def access_error_handler(request: Request, exc: AccessError):
     logger.warning("request_id=%s access_denied=%s", _rid(request), exc)
-    audit_event(request, "access_denied", 403, reason=str(exc))
+    audit_event(request, "access_denied", 403, guardrail="role-access", category="access", reason=str(exc))
     return JSONResponse(status_code=403, content={"detail": "Access denied."})
 
 
@@ -282,7 +290,7 @@ def ready():
 def login(body: LoginRequest, request: Request):
     name = body.username.strip().lower()
     if throttle.is_locked(name):
-        audit_event(request, "login_locked", 429, username=name)
+        audit_event(request, "login_locked", 429, username=name, guardrail="login-throttle", category="authentication")
         raise HTTPException(status_code=429, detail="Too many sign-in attempts. Try again later.")
     user = get_user(name)
     if not authenticate(user, body.password):
@@ -382,7 +390,7 @@ def knowledge_search(request: Request, q: str = Query(min_length=1, max_length=5
 def record_export(body: ExportRequest, request: Request, user: User = Depends(signed_in)):
     """GR-PRIV-05: the UI records an export here before it offers the file."""
     if not access.may_export(user.role):
-        audit_event(request, "export_denied", 403, guardrail="GR-PRIV-05", question=body.question)
+        audit_event(request, "export_denied", 403, guardrail="GR-PRIV-05", category="export", question=body.question)
         return JSONResponse(status_code=403, content={"detail": "Your role may not export data."})
     audit_event(request, "export", 200, guardrail="GR-PRIV-05", question=body.question, columns=body.columns,
                 row_count=body.row_count, conversation_id=str(body.conversation_id) if body.conversation_id else None)

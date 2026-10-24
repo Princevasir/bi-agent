@@ -28,16 +28,17 @@ TOO_BROAD_MESSAGE = ("The generated query was too broad to run safely. "
 class SQLRejected(Exception):
     """Raised for SQL that must not run. user_message, when set, is safe to show the user."""
 
-    def __init__(self, reason, user_message=None, repairable=False):
+    def __init__(self, reason, user_message=None, repairable=False, guardrail="GR-SQL-01", category="statement"):
         super().__init__(reason)
         self.user_message = user_message
+        self.guardrail, self.category = guardrail, category       # GR-OBS-01: recorded with the decision
         # GR-WF-01: True only for mistakes the model can fix (syntax, an unlisted function, a query too
         # broad); never for a rule (tables, personal data, writes, schema names, locking).
         self.repairable = repairable
 
 
 def _too_broad(reason):
-    return SQLRejected(reason, TOO_BROAD_MESSAGE, repairable=True)
+    return SQLRejected(reason, TOO_BROAD_MESSAGE, repairable=True, guardrail="GR-SQL-02", category="structure")
 
 
 def _function_name(f):
@@ -49,13 +50,13 @@ def _check_functions(tree):
         if isinstance(f, (exp.Connector, exp.Binary)):
             continue   # AND, OR and operators are parsed as functions; they are not calls
         if _function_name(f).lower().startswith(BLOCKED_PREFIXES):
-            raise SQLRejected(f"Function not permitted: {_function_name(f)}")
+            raise SQLRejected(f"Function not permitted: {_function_name(f)}", category="function")
         if isinstance(f.parent, exp.Dot):
-            raise SQLRejected("Schema-qualified functions are not allowed.")
+            raise SQLRejected("Schema-qualified functions are not allowed.", category="function")
         allowed = (f.name.lower() in ALLOWED_FUNCTION_NAMES if isinstance(f, exp.Anonymous)
                    else type(f).__name__ in ALLOWED_FUNCTION_TYPES)
         if not allowed:
-            raise SQLRejected(f"Function not permitted: {_function_name(f)}", repairable=True)
+            raise SQLRejected(f"Function not permitted: {_function_name(f)}", repairable=True, category="function")
 
 
 def _is_one_row(source, ctes):
@@ -119,13 +120,14 @@ def _check_columns(tree, ctes, denied):
         return
     for col in tree.find_all(exp.Column):
         if col.name.lower() in restricted:
-            raise SQLRejected(f"Personal data column: {col.name}", PERSONAL_DATA_MESSAGE)
+            raise SQLRejected(f"Personal data column: {col.name}", PERSONAL_DATA_MESSAGE, guardrail="GR-SQL-05",
+                              category="personal_data")
     star_tables = {t for t, _ in denied if t in tables}
     for select in tree.find_all(exp.Select):
         for e in select.expressions:
             if isinstance(e, exp.Star) or (isinstance(e, exp.Column) and isinstance(e.this, exp.Star)):
                 raise SQLRejected(f"SELECT * over tables with personal data: {', '.join(sorted(star_tables))}",
-                                  PERSONAL_DATA_MESSAGE)
+                                  PERSONAL_DATA_MESSAGE, guardrail="GR-SQL-05", category="personal_data")
 
 
 def validate_sql(sql: str, allowed_tables = ALLOWED_TABLES, denied_columns=frozenset(), rules=()) -> ValidatedSQL:
@@ -145,15 +147,16 @@ def validate_sql(sql: str, allowed_tables = ALLOWED_TABLES, denied_columns=froze
     ctes = {c.alias for c in tree.find_all(exp.CTE)}
     for t in tree.find_all(exp.Table):
         if isinstance(t.this, exp.Func) or not t.name:
-            raise SQLRejected("Table functions are not allowed.", repairable=True)
+            raise SQLRejected("Table functions are not allowed.", repairable=True, category="function")
         if t.name in ctes and not t.db:
             continue
         if t.db or t.catalog:
-            raise SQLRejected("Schema-qualified tables are not allowed.")
+            raise SQLRejected("Schema-qualified tables are not allowed.", category="table")
         if t.name.lower() not in allowed_tables:
-            raise SQLRejected(f"Table not permitted: {t.name}")
+            raise SQLRejected(f"Table not permitted: {t.name}", category="table")
     _check_functions(tree)
     _check_structure(tree)
     _check_columns(tree, ctes, denied_columns)
-    metric_rules.check(tree, rules, ctes, lambda reason: SQLRejected(reason, repairable=True))
+    metric_rules.check(tree, rules, ctes, lambda reason: SQLRejected(reason, repairable=True, guardrail="GR-ACC-01",
+                                                                         category="metric"))
     return ValidatedSQL(tree.sql(dialect="postgres"))
