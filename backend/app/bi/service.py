@@ -47,6 +47,7 @@ class State(TypedDict, total=False):
     chart: Optional[dict]
     chart_note: Optional[str]
     repairs: int
+    suppressed: int
     repair: tuple
     decline_retries: int
     trace: Annotated[list, operator.add]
@@ -133,6 +134,7 @@ def answer_question(question, generate, today, history=None, role="analyst", kno
         "chart": out.get("chart"),
         "chart_note": out.get("chart_note"),
         "sql_repairs": out.get("repairs", 0),
+        "suppressed_groups": out.get("suppressed", 0),
         "decline_retries": out.get("decline_retries", 0),
         "sources": [{"document_id": h.document_id, "title": h.title, "doc_type": h.doc_type, "owner": h.owner,
                      "version": h.version, "score": h.score} for h in out.get("knowledge") or []],

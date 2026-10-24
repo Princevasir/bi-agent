@@ -71,6 +71,19 @@ def request_deadline_seconds():
     return _limit("REQUEST_DEADLINE_SECONDS", "deadline_seconds")
 
 
+def privacy_min_group():
+    """Fewest customers an aggregate row may describe (GR-PRIV-03). The environment may only RAISE it:
+    for this limit, tightening means a larger group; 0 in the policy file switches the check off."""
+    floor = policy.get().sql["min_group_customers"]
+    raw = os.getenv("PRIVACY_MIN_GROUP")
+    if raw is None or floor == 0:
+        return floor
+    try:
+        return max(int(raw), floor)
+    except ValueError:
+        raise ValueError(f"PRIVACY_MIN_GROUP must be a whole number, got {raw!r}") from None
+
+
 def decline_retries():
     """Second opinions when the model declines a question that clearly mentions the data."""
     return _limit("DECLINE_RETRIES", "decline_retries", minimum=0)

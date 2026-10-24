@@ -5,8 +5,9 @@ the role's read-only login. A fixable failure gets one repair and a decline abou
 second opinion, both bounded by the policy file.
 """
 from app import limits
-from app.access import denied_columns, metric_rules, tables_for
+from app.access import denied_columns, metric_rules, tables_for, uses_catalog
 from app.bi.catalog_answers import asks_for_personal_data, worth_a_second_opinion
+from app.bi.small_groups import suppress_small_groups, with_customer_count
 from app.bi.sql_guard import PERSONAL_DATA_MESSAGE, SQLRejected, validate_sql
 from app.bi.text_to_sql import NO_QUERY, generate_sql, is_no_query
 from app.db import DBQueryError, run_readonly
@@ -56,8 +57,17 @@ def check_sql(state, ctx):
 
 
 def execute(state, ctx):
+    role = state["role"]
+    minimum = limits.privacy_min_group() if uses_catalog() else 0
+    counted = with_customer_count(state["sql"]) if minimum else None
     try:
-        return run_readonly(state["sql"], role=state["role"])
+        if counted is None:
+            return {**run_readonly(state["sql"], role=role), "suppressed": 0}
+        # GR-PRIV-03: the same query plus a customer count per row, validated again (fail closed if not)
+        checked = validate_sql(counted, tables_for(role), denied_columns(role), metric_rules())
+        result = run_readonly(checked, role=role)
+        columns, rows, hidden = suppress_small_groups(result["columns"], result["rows"], minimum)
+        return {**result, "columns": columns, "rows": rows, "suppressed": hidden}
     except DBQueryError as e:
         return retry_or_raise(state, state["sql"], e.detail or str(e), e)
 

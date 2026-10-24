@@ -51,6 +51,7 @@ The full list of what the project offers today. Keep it current as features land
 - Injection hardening (GR-INJ-01 to -03): questions, history, results and failed queries are fenced as data in every prompt; answers containing SQL, links or instruction-like text are replaced by the plain answer; the retail data contains planted injections (a product and a campaign name) that the adversarial evaluation reads.
 - Every data answer shows its assumptions, read from the SQL: the date range and filters it used (GR-ACC-03). A "why" question answered from data never claims a cause; the answer says the data shows what happened, not why (GR-ACC-04).
 - One deadline per question (GR-WF-02, 300 s): no further step starts after it.
+- Small groups are hidden (GR-PRIV-03): a total or average over fewer than 5 customers (for example "average spend of Platinum customers in one town") could reveal one person, so such result rows are removed and the answer says how many were hidden. Groups with no identifiable customers, such as guest orders, are kept.
 - Privacy (GR-PRIV-01, -02, -04): personal columns (names, email, phone, street, postal code, salary) and any email address or phone number in the results are masked before the rows reach the model, while your screen still shows what your role may see; logs and the audit trail mask emails and phone numbers and record database errors by class only; requests to OpenRouter ask for no data collection by default.
 - Per-user limits: 10 questions a minute and 200 a day (GR-COST-01), 600,000 tokens a day (GR-COST-02) and one running question at a time (GR-COST-03), each refused with a clear 429 and audited as `rate_limited`; with `STATE_STORE=postgres` they hold across backend instances.
 - Cost check before execution (GR-SQL-03): every generated query is planned with `EXPLAIN` first, and one that would scan or join far too much (for example a product-level self-join of all order lines) is refused in milliseconds with "That question would scan too much data" instead of loading the database.
@@ -245,6 +246,7 @@ Set in `.env`; defaults come from `docker-compose.yml`.
 | `SQL_MAX_TABLES` | 8 | Table references allowed in one query |
 | `SQL_MAX_DEPTH` | 3 | How deeply subqueries may be nested |
 | `SQL_MAX_PLAN_COST`, `SQL_MAX_PLAN_ROWS` | 1000000, 10000000 | Planner estimates above which a generated query is refused before it runs (GR-SQL-03); rows are counted at the largest plan step |
+| `PRIVACY_MIN_GROUP` | 5 | Fewest customers an aggregate result row may describe (GR-PRIV-03); smaller groups are hidden with a note. The environment can only raise it; set `min_group_customers = 0` in the policy file to switch it off |
 | `REQUEST_DEADLINE_SECONDS` | 300 | Deadline for one question: no further workflow step starts after it, and the user gets 504 "That question took too long" (GR-WF-02) |
 | `WORKFLOW_MAX_STEPS` | 15 | Steps one question may take through the workflow; a run that reaches it is stopped with a 422 |
 | `LOG_LEVEL` | `INFO` | Backend log level |

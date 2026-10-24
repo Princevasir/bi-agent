@@ -17,6 +17,16 @@ logger = logging.getLogger("bi_agent")
 JOB = "Explains the result or the business documents, and falls back to plain text if anything is ungrounded."
 
 
+def _privacy_note(state):
+    """GR-PRIV-03: say how many groups were hidden for being too small."""
+    hidden = state.get("suppressed") or 0
+    if not hidden:
+        return ""
+    from app import limits
+    return (f" {hidden} group{'s' if hidden != 1 else ''} with fewer than {limits.privacy_min_group()} customers "
+            f"{'are' if hidden != 1 else 'is'} hidden to protect privacy.")
+
+
 def has_data(rows):
     if not rows:
         return False
@@ -64,12 +74,12 @@ def ground(state, ctx):
             answer += NOT_WHY
     if state["truncated"]:
         answer += f" Note: the result was truncated to the first {len(state['rows'])} rows."
-    return {"answer": answer, "answer_source": source}
+    return {"answer": answer + _privacy_note(state), "answer_source": source}
 
 
 def no_rows(state, ctx):
     text = "The query returned no rows." if not state["rows"] else "No matching data was found."
-    return {"answer": text, "answer_source": "fallback"}
+    return {"answer": text + _privacy_note(state), "answer_source": "fallback"}
 
 
 
