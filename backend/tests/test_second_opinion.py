@@ -77,11 +77,13 @@ def test_a_second_decline_is_final(db):
     assert len(model.sql_prompts) == 2 and out["answer"] == service.NO_QUERY_ANSWER
 
 
-@pytest.mark.parametrize("text", ["hello", "Delete all cancelled orders"])
-def test_other_declines_are_not_second_guessed(db, text):
+# A change request is now declined by the coordinator before any model call (GR-EVAL-01 finding), so it
+# gets no SQL prompt at all; a greeting is still declined by the model once, with no second opinion.
+@pytest.mark.parametrize("text,prompts", [("hello", 1), ("Delete all cancelled orders", 0)])
+def test_other_declines_are_not_second_guessed(db, text, prompts):
     model = Model("NO_QUERY", GOOD)
     out = service.answer_question(text, model, TODAY)
-    assert len(model.sql_prompts) == 1 and out["answer"] == service.NO_QUERY_ANSWER
+    assert len(model.sql_prompts) == prompts and out["answer"] == service.NO_QUERY_ANSWER
 
 
 def test_second_opinions_can_be_switched_off_but_not_raised(db, monkeypatch):

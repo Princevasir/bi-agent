@@ -27,6 +27,15 @@ KNOWLEDGE_PATTERNS = [
 ]
 
 
+# A message that starts with a command to change data (found by GR-EVAL-01)
+CHANGE = re.compile(r"^\s*(?:(?:ok|okay|now|then|please|and|also|great)[,.!]?\s+)*"
+                    r"(delete|remove|drop|truncate|update|insert|alter|erase|wipe|purge|set\s+the|replace)\b", re.I)
+
+
+def is_change_request(text):
+    return bool(CHANGE.search(str(text)))
+
+
 def is_about_knowledge(text):
     text = str(text).lower()
     return any(re.search(p, text) for p in KNOWLEDGE_PATTERNS)
@@ -35,6 +44,8 @@ def is_about_knowledge(text):
 def route(state, ctx):
     if is_chart_only(state["question"]):
         return {"route": "chart_change"}
+    if is_change_request(state["question"]):          # declined before any rewrite or model call
+        return {"route": "change"}
     intent = catalog_question(state["question"], None)      # by wording only; no database call yet
     # Business knowledge outranks the catalog's metric list, never a table or column description.
     if ctx.knowledge is not None and is_about_knowledge(state["question"]) and intent in (None, ("metrics", None)):
@@ -47,6 +58,8 @@ def route(state, ctx):
 def after_route(state):
     if state["route"] == "chart_change":
         return "redraw"
+    if state["route"] == "change":
+        return "declined"
     if state["route"] == "catalog":
         return "catalog_answer"
     if state["route"] == "knowledge":
@@ -58,4 +71,5 @@ def rewrite(state, ctx):
     lines = ctx.generate(rewrite_prompt(state["question"], state["history"], state["today"])).strip().splitlines()
     text = lines[0].strip()[:MAX_QUESTION_CHARS] if lines else ""
     return {"standalone": text or state["question"]}
+
 

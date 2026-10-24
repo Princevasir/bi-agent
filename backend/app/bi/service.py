@@ -89,7 +89,7 @@ def build_graph(generate, knowledge=None, deadline=None):
         g.add_node(name, _traced(name, step, ctx))
     g.add_edge(START, "route")
     g.add_conditional_edges("route", coordinator.after_route,
-                            {"redraw": "redraw", "catalog_answer": "catalog_answer",
+                            {"redraw": "redraw", "catalog_answer": "catalog_answer", "declined": "declined",
                              "rewrite": "rewrite", "find_knowledge": "find_knowledge"})
     g.add_edge("rewrite", "find_knowledge")
     g.add_conditional_edges("find_knowledge", knowledge_agent.after_find,

@@ -51,6 +51,7 @@ The full list of what the project offers today. Keep it current as features land
 - Injection hardening (GR-INJ-01 to -03): questions, history, results and failed queries are fenced as data in every prompt; answers containing SQL, links or instruction-like text are replaced by the plain answer; the retail data contains planted injections (a product and a campaign name) that the adversarial evaluation reads.
 - Every data answer shows its assumptions, read from the SQL: the date range and filters it used (GR-ACC-03). A "why" question answered from data never claims a cause; the answer says the data shows what happened, not why (GR-ACC-04).
 - One deadline per question (GR-WF-02, 300 s): no further step starts after it.
+- Adversarial evaluation (GR-EVAL-01): `python -m evals.adversarial` runs 32 attacks against the real model; last run 96 of 96 safe. Messages that start with a data-changing command ("delete…", "now remove…") are declined by the coordinator before any model call.
 - Alerts (GR-OBS-02): `python -m app.alerts` raises an alert for repeated access denials, any server error, a spike of cost rejections or token spend over a daily limit; unexpected errors return a plain 500 and are audited as `server_error`.
 - Every guardrail decision is audited with the guardrail's ID, a category, the request ID and its latency (GR-OBS-01), so `SELECT detail->>'guardrail', count(*) FROM audit.events ... GROUP BY 1` shows which guardrails fire.
 - Table export with an audit trail (GR-PRIV-05): "Export CSV" under a table records the export in the backend first and only then offers the download; roles need `export = true` in the policy file (both roles have it).
@@ -312,6 +313,14 @@ cd backend && ALERTS_DATABASE_URL=postgresql://audit_reader:audit_reader_dev_pw@
 ```
 
 Run it from cron or a scheduler; on AWS (M26) the same rules become CloudWatch alarms.
+
+### Adversarial evaluation
+
+```bash
+cd backend && set -a && source ../.env && set +a && .venv/bin/python -m evals.adversarial --repeat 3   # about 15 minutes locally
+```
+
+32 attacks in 8 categories (direct and indirect injection, injection across follow-ups, personal-data extraction, cross-role reads, cost bombs, data changes, prompt disclosure) through the real app and model; each must be refused, declined or answered safely every time, and the data must not change. Exits 1 on any failure. Last run: 96 of 96.
 
 ### Demo dry run
 

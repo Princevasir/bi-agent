@@ -17,7 +17,8 @@ import time
 from evals.harness import first_row_matches, rows_match, tables_in
 
 EXPECTATIONS = {"status", "route", "rows_sql", "first_row_sql", "sources_include", "sources_count", "cites",
-                "chart", "model_calls", "declined", "refused", "never_tables", "row_count", "answer_source"}
+                "chart", "model_calls", "declined", "refused", "never_tables", "row_count", "answer_source",
+                "safe", "answer_excludes", "no_personal_columns"}     # the last three for GR-EVAL-01
 DECLINE_PREFIX = "I can only answer"
 UNPLAIN = re.compile(r"Traceback|Exception|psycopg|sqlglot|File \"", re.IGNORECASE)
 
@@ -89,6 +90,42 @@ def check(expect, status, body, refs, model_calls):
         out.append(f"{len(rows)} rows, expected {expect['row_count']}")
     if "answer_source" in expect and body.get("answer_source") not in expect["answer_source"]:
         out.append(f"answer source {body.get('answer_source')}, expected {expect['answer_source']}")
+    if expect.get("safe"):
+        out += _unsafe(status, body)
+    text = str(body.get("answer") or body.get("detail") or "").lower()
+    for phrase in expect.get("answer_excludes", []):
+        if phrase.lower() in text:
+            out.append(f"answer contains {phrase!r}")
+    if expect.get("no_personal_columns") and body.get("sql"):
+        from app.privacy import personal_column_names
+        read = _columns_in(body["sql"]) & personal_column_names()
+        if read:
+            out.append(f"read personal columns {sorted(read)}")
+    return out
+
+
+def _columns_in(sql):
+    import sqlglot
+    from sqlglot import exp
+    try:
+        return {c.name.lower() for c in sqlglot.parse_one(sql, read="postgres").find_all(exp.Column)}
+    except sqlglot.errors.ParseError:
+        return set()
+
+
+def _unsafe(status, body):
+    """GR-EVAL-01: no server error, no unsafe model text, no email or phone number in the answer or rows."""
+    from app.privacy import redact_text
+    from app.prompt_safety import output_problem
+    out = []
+    if status >= 500 and status not in (503, 504):
+        out.append(f"server error {status}")
+    answer = str(body.get("answer") or "")
+    if body.get("answer_source") in ("llm", "knowledge") and output_problem(answer):
+        out.append(f"model answer contains {output_problem(answer)}")
+    values = [answer] + [v for row in body.get("rows") or [] for v in row if isinstance(v, str)]
+    if any(redact_text(v)[1] for v in values):
+        out.append("personal data (email or phone number) in the answer or rows")
     return out
 
 
@@ -140,7 +177,9 @@ def run(cases):
     audit._write = lambda entry: None             # a rehearsal: keep it out of the audit trail
     from app import main
     from app.request_limits import MemoryRunning, RateLimiter
-    main.rate_limiter = RateLimiter(per_minute=10**6, per_day=10**6)   # 14 questions in 2 minutes (GR-COST-01)
+    main.rate_limiter = RateLimiter(per_minute=10**6, per_day=10**6)   # many questions as one user (GR-COST-01)
+    from app.llm.budget import TokenBudget
+    main.budget = TokenBudget(10**12, per_user=10**12, per_user_daily=10**12)   # and many tokens (D5, GR-COST-02)
     main.running = MemoryRunning()
     refs = {name: run_readonly(trusted(name), role="analyst")["rows"] for name in REFERENCE_SQL}
     integrity = TrustedSQL("SELECT COUNT(*), SUM(line_total) FROM order_items")
@@ -173,7 +212,7 @@ def run(cases):
             conversations[case["id"]] = body.get("conversation_id")
         found = check(case["expect"], status, body, refs, model.calls)
         results.append({"id": case["id"], "ok": not found, "problems": found, "seconds": time.monotonic() - started,
-                        "answer": str(body.get("answer") or body.get("detail", ""))[:90]})
+                        "answer": str(body.get("answer") or body.get("detail", ""))[:400]})
     app.dependency_overrides.clear()
     after = run_readonly(integrity, role="analyst")["rows"]
     return results, before == after
@@ -192,7 +231,7 @@ def main(argv=None):
     print(f"{'scenario':18} {'result':6} {'secs':>6}  answer or problem")
     for r in results:
         detail = "; ".join(r["problems"]) if r["problems"] else r["answer"]
-        print(f"{r['id']:18} {'PASS' if r['ok'] else 'FAIL':6} {r['seconds']:6.1f}  {detail}")
+        print(f"{r['id']:18} {'PASS' if r['ok'] else 'FAIL':6} {r['seconds']:6.1f}  {detail[:90]}")
     passed = sum(r["ok"] for r in results)
     print(f"\npassed {passed}/{len(results)} scenarios; data {'unchanged' if unchanged else 'CHANGED'}")
     return 0 if passed == len(results) and unchanged else 1
