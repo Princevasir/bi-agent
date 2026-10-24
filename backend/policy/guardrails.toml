@@ -15,6 +15,8 @@ max_tables = 8              # table references per query, repeats counted (GR-SQ
 max_depth = 3               # how deeply SELECTs may be nested (GR-SQL-02)
 repair_attempts = 1         # retries after a fixable SQL failure; 0 switches repair off (GR-WF-01)
 decline_retries = 1         # second opinions when the model declines a question that mentions the data
+max_plan_cost = 1000000     # planner cost above which generated SQL is not run (GR-SQL-03); legit max 81,373
+max_plan_rows = 10000000    # planner rows at the largest step (GR-SQL-03); legit max 616,532, bomb 314M
 max_steps = 15              # workflow steps per question; the longest legitimate path takes 13 (demo gap D1)
 
 [sql.functions]

@@ -31,3 +31,7 @@ class LLMBudgetError(LLMRateLimitError):
 
 class LLMUnavailableError(LLMError):
     """A provider is skipped for a while after repeated failures (circuit breaker, demo gap D9)."""
+
+
+class LLMDailyQuotaError(LLMBudgetError):
+    """A user's daily token quota is used up (GR-COST-02)."""

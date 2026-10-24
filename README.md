@@ -48,6 +48,8 @@ The full list of what the project offers today. Keep it current as features land
 - Conversation history per user, readable through `GET /conversations/{id}`.
 
 ### Safety and access control
+- Per-user limits: 10 questions a minute and 200 a day (GR-COST-01), 600,000 tokens a day (GR-COST-02) and one running question at a time (GR-COST-03), each refused with a clear 429 and audited as `rate_limited`; with `STATE_STORE=postgres` they hold across backend instances.
+- Cost check before execution (GR-SQL-03): every generated query is planned with `EXPLAIN` first, and one that would scan or join far too much (for example a product-level self-join of all order lines) is refused in milliseconds with "That question would scan too much data" instead of loading the database.
 - Every generated query passes a validator before it runs: exactly one `SELECT` (or a `UNION`, `INTERSECT` or `EXCEPT` of them), no write hidden anywhere in it, allowed tables only, no schema-qualified names, only functions from an approved list (so nothing that runs SQL from a string, reads server settings, or builds huge values), no `SELECT INTO` or locking, no joins without a join condition, at most 8 tables and 3 levels of nested subqueries. Queries that are too broad get a message suggesting a more specific question.
 - Queries run through a read-only database login with a 5-second timeout and a 200-row cap. Rows are read in small batches, so a query matching millions of rows never loads them into the backend.
 - Two roles: `analyst` (orders and regions) and `limited` (regions only), each with its own database login, so the database refuses what the role may not read even if the validator were bypassed.
@@ -228,6 +230,8 @@ Set in `.env`; defaults come from `docker-compose.yml`.
 | `LLM_TOKEN_BUDGET` | 400000 | Tokens per rolling hour, all users together; when reached, questions get a 429 until older usage expires |
 | `LLM_USER_TOKEN_BUDGET` | 150000 | Each user's share of the hourly budget (about 20 retail questions) |
 | `LLM_TOKEN_BUDGET_WINDOW_SECONDS` | 3600 | Length of the rolling budget window |
+| `LLM_USER_DAILY_TOKEN_BUDGET` | 600000 | Each user's tokens per rolling day, about 75 retail questions (GR-COST-02) |
+| `RATE_PER_MINUTE`, `RATE_PER_DAY` | 10, 200 | Questions per user per minute and per day on `/ask`, `/ask/sql` and `/chat` (GR-COST-01); over the limit, 429 with `Retry-After` |
 | `DATA_SOURCE` | `sample` | `retail` answers from the 29-table retail demo database (fill it first with `python -m retail.load --scale full`); `sample` uses the 12-row database the tests use |
 | `GUARDRAIL_POLICY` | `backend/policy/guardrails.toml` | Path to the guardrail policy file |
 | `SQL_MAX_ROWS` | 200 | Rows returned per query; more are never read from the database |
@@ -235,6 +239,7 @@ Set in `.env`; defaults come from `docker-compose.yml`.
 | `SQL_TIMEOUT_MS` | 5000 | Statement timeout per query |
 | `SQL_MAX_TABLES` | 8 | Table references allowed in one query |
 | `SQL_MAX_DEPTH` | 3 | How deeply subqueries may be nested |
+| `SQL_MAX_PLAN_COST`, `SQL_MAX_PLAN_ROWS` | 1000000, 10000000 | Planner estimates above which a generated query is refused before it runs (GR-SQL-03); rows are counted at the largest plan step |
 | `WORKFLOW_MAX_STEPS` | 15 | Steps one question may take through the workflow; a run that reaches it is stopped with a 422 |
 | `LOG_LEVEL` | `INFO` | Backend log level |
 | `LOG_FORMAT` | `json` | `json` (one JSON object per line) or `text` for easier local reading |

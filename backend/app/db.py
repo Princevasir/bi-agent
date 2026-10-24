@@ -35,6 +35,14 @@ class ResultTooLargeError(DBError):
     """A single result row is over the byte limit."""
 
 
+class QueryTooExpensiveError(DBError):
+    """The planner estimates the query is too expensive to run (GR-SQL-03); it was not run."""
+
+    def __init__(self, message, estimate):
+        super().__init__(message)
+        self.estimate = estimate
+
+
 class UnvalidatedSQLError(TypeError):
     """SQL that came neither from validate_sql nor from TrustedSQL."""
 
@@ -48,6 +56,30 @@ def _json_safe(v):
 
 
 FETCH_BATCH = 50
+
+
+def _largest_rows(node):
+    return max([node.get("Plan Rows", 0)] + [_largest_rows(child) for child in node.get("Plans", [])])
+
+
+def plan_problem(plan, max_cost, max_rows):
+    """Why a plan is too expensive, or None. Rows count at the largest node: a join explosion
+    under an aggregate returns one row but still builds every pair (GR-SQL-03)."""
+    cost, rows = plan.get("Total Cost", 0), _largest_rows(plan)
+    if cost > max_cost:
+        return f"estimated cost {cost:,.0f} is over the limit of {max_cost:,}"
+    if rows > max_rows:
+        return f"estimated {rows:,.0f} rows in one step is over the limit of {max_rows:,}"
+    return None
+
+
+def _check_cost(conn, sql, params):
+    """EXPLAIN (never ANALYZE) as the same login in the same read-only transaction; errors fail closed."""
+    plan = conn.execute("EXPLAIN (FORMAT JSON) " + sql, params).fetchone()[0][0]["Plan"]
+    problem = plan_problem(plan, limits.sql_max_plan_cost(), limits.sql_max_plan_rows())
+    if problem:
+        raise QueryTooExpensiveError(f"Query too expensive: {problem}.",
+                                     {"cost": round(plan.get("Total Cost", 0)), "rows": round(_largest_rows(plan))})
 
 
 def run_readonly(sql, params=None, max_rows=None, timeout_ms=None, role="analyst", max_bytes=None):
@@ -70,6 +102,8 @@ def run_readonly(sql, params=None, max_rows=None, timeout_ms=None, role="analyst
             url, connect_timeout=5,
             options=f"-c statement_timeout={timeout_ms} -c default_transaction_read_only=on",
         ) as conn:
+            if isinstance(sql, ValidatedSQL):          # generated SQL; code-authored TrustedSQL is not checked
+                _check_cost(conn, sql, params)
             with conn.cursor(name="bi_result") as cur:
                 cur.execute(sql, params)
                 if cur.description is None:

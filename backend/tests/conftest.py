@@ -43,5 +43,13 @@ def audit_events(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def generous_request_limits(monkeypatch):
+    """GR-COST-01/03: tests ask many questions as one user; tests of the limits install their own."""
+    from app.request_limits import MemoryRunning, RateLimiter
+    monkeypatch.setattr(main_module, "rate_limiter", RateLimiter(per_minute=10**6, per_day=10**6))
+    monkeypatch.setattr(main_module, "running", MemoryRunning())
+
+
+@pytest.fixture(autouse=True)
 def fresh_login_throttle(monkeypatch):
     monkeypatch.setattr(main_module, "throttle", LoginThrottle())

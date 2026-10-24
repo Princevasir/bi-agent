@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 import time
 import uuid
@@ -21,17 +22,19 @@ from app.bi.schema import catalog_for, get_schema, metrics_for
 from app.bi.service import StepLimitError, answer_question
 from app.bi.sql_guard import SQLRejected, validate_sql
 from app.bi.text_to_sql import generate_sql, is_no_query
-from app.db import (DBAccessError, DBError, DBQueryError, DBTimeoutError, ResultTooLargeError, TrustedSQL,
+from app.db import (DBAccessError, DBError, DBQueryError, DBTimeoutError, QueryTooExpensiveError, ResultTooLargeError, TrustedSQL,
                     run_readonly)
 from app.llm import get_llm
 from app.knowledge.context import knowledge_for
 from app.llm.base import (
-    LLMBudgetError, LLMConfigError, LLMError, LLMRateLimitError, LLMService, LLMTimeoutError, LLMUnavailableError,
+    LLMBudgetError, LLMConfigError, LLMDailyQuotaError, LLMError, LLMRateLimitError, LLMService, LLMTimeoutError, LLMUnavailableError,
 )
 from app.llm.budget import from_env as budget_from_env
 from app import policy
 from app.logging_setup import configure_logging
+from app import request_limits
 from app import throttle as login_throttle
+from app.request_limits import Busy, RateLimited
 
 configure_logging()
 logger = logging.getLogger("bi_agent")
@@ -42,10 +45,12 @@ app = FastAPI(title="BI Agent API")
 budget = budget_from_env()
 store = conversation.from_env()       # STATE_STORE: memory or postgres (demo gap D11)
 throttle = login_throttle.from_env()
+rate_limiter, running = request_limits.from_env()   # GR-COST-01 and GR-COST-03
 
 # Most specific first; LLMError is the catch-all.
 LLM_ERRORS = [
     (LLMTimeoutError, 504, "The language model timed out."),
+    (LLMDailyQuotaError, 429, "Your daily limit has been reached; it resets within 24 hours."),
     (LLMBudgetError, 429, "The question limit for this hour has been reached. Please try again later."),
     (LLMRateLimitError, 429, "Too many requests to the language model."),
     (LLMUnavailableError, 503, "The language model is temporarily unavailable. Please try again in a minute."),
@@ -110,6 +115,16 @@ async def result_too_large_handler(request: Request, exc: ResultTooLargeError):
                         content={"detail": "The result is too large to show. Try a narrower question."})
 
 
+@app.exception_handler(QueryTooExpensiveError)
+async def too_expensive_handler(request: Request, exc: QueryTooExpensiveError):
+    logger.warning("sql_rejected", extra={"request_id": _rid(request), "guardrail": "GR-SQL-03",
+                                          "category": "cost", "estimate": exc.estimate})
+    audit_event(request, "sql_rejected", 422, guardrail="GR-SQL-03", category="cost", estimate=exc.estimate,
+                reason=str(exc))
+    return JSONResponse(status_code=422,
+                        content={"detail": "That question would scan too much data; try a shorter period or a grouping."})
+
+
 @app.exception_handler(DBError)
 async def db_error_handler(request: Request, exc: DBError):
     if isinstance(exc, DBTimeoutError):
@@ -140,6 +155,28 @@ async def step_limit_handler(request: Request, exc: StepLimitError):
     audit_event(request, "step_limit", 422, reason=str(exc))
     return JSONResponse(status_code=422,
                         content={"detail": "I could not answer that within the step limit. Try asking more simply."})
+
+
+@app.exception_handler(RateLimited)
+async def rate_limited_handler(request: Request, exc: RateLimited):
+    audit_event(request, "rate_limited", 429, guardrail="GR-COST-01", reason=exc.reason)
+    wait = f"{exc.retry_after} seconds" if exc.retry_after < 120 else f"{math.ceil(exc.retry_after / 60)} minutes"
+    return JSONResponse(status_code=429, headers={"Retry-After": str(exc.retry_after)},
+                        content={"detail": f"You have asked too many questions in the last {exc.reason}. "
+                                           f"Please try again in {wait}."})
+
+
+@app.exception_handler(Busy)
+async def busy_handler(request: Request, exc: Busy):
+    audit_event(request, "rate_limited", 429, guardrail="GR-COST-03", reason="concurrency")
+    return JSONResponse(status_code=429, content={"detail": "Please wait for your previous question to finish."})
+
+
+def question_limits(user: User = Depends(signed_in)):
+    """GR-COST-01 and GR-COST-03 for every route that can call the model."""
+    rate_limiter.hit(user.username)
+    with running.hold(user.username):
+        yield
 
 
 @app.exception_handler(AuthConfigError)
@@ -245,7 +282,7 @@ def login(body: LoginRequest, request: Request):
 
 # ---- protected routes ----
 
-@app.post("/chat", response_model=ChatResponse, dependencies=[Depends(signed_in)])
+@app.post("/chat", response_model=ChatResponse, dependencies=[Depends(signed_in), Depends(question_limits)])
 def chat(body: ChatRequest, request: Request,
          llm: LLMService = Depends(get_llm)) -> ChatResponse:
     result_text = make_generate(llm, request)(body.message)
@@ -262,7 +299,7 @@ def schema(user: User = Depends(signed_in)):
     return get_schema(user.role)
 
 
-@app.post("/ask/sql")
+@app.post("/ask/sql", dependencies=[Depends(question_limits)])
 def ask_sql(body: ChatRequest, request: Request,
             user: User = Depends(signed_in),
             llm: LLMService = Depends(get_llm)):
@@ -273,7 +310,7 @@ def ask_sql(body: ChatRequest, request: Request,
     return {"question": body.message, "sql": sql}
 
 
-@app.post("/ask")
+@app.post("/ask", dependencies=[Depends(question_limits)])
 def ask(body: AskRequest, request: Request,
         user: User = Depends(signed_in),
         llm: LLMService = Depends(get_llm),

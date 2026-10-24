@@ -56,6 +56,16 @@ def workflow_max_steps():
     return _limit("WORKFLOW_MAX_STEPS", "max_steps")
 
 
+def sql_max_plan_cost():
+    """Planner cost above which a generated query is not run (GR-SQL-03)."""
+    return _limit("SQL_MAX_PLAN_COST", "max_plan_cost")
+
+
+def sql_max_plan_rows():
+    """Planner row estimate, at the largest step, above which a generated query is not run (GR-SQL-03)."""
+    return _limit("SQL_MAX_PLAN_ROWS", "max_plan_rows")
+
+
 def decline_retries():
     """Second opinions when the model declines a question that clearly mentions the data."""
     return _limit("DECLINE_RETRIES", "decline_retries", minimum=0)

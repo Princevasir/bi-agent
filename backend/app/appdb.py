@@ -1,6 +1,7 @@
 import os
 import time
 import uuid
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 
 import psycopg
@@ -134,18 +135,48 @@ class PgLoginThrottle:
         _run("DELETE FROM login_failures WHERE username = %s", (username,))
 
 
+LEDGER_TABLES = ("token_usage", "request_usage")     # fixed names: a table name cannot be a query parameter
+
+
 class PgTokenLedger:
-    """Token spending in appdb, so the hourly budget covers every backend instance."""
+    """Spending in appdb (tokens in token_usage, questions in request_usage), shared by every instance."""
+
+    def __init__(self, table="token_usage"):
+        if table not in LEDGER_TABLES:
+            raise ValueError(f"Not a ledger table: {table!r}")
+        self.table = table
 
     def add(self, at, user, tokens):
-        _run("INSERT INTO token_usage (spent_at, username, tokens) VALUES (%s, %s, %s)", (at, user, tokens))
+        _run(f"INSERT INTO {self.table} (spent_at, username, tokens) VALUES (%s, %s, %s)", (at, user, tokens))
 
     def prune(self, cutoff):
-        _run("DELETE FROM token_usage WHERE spent_at <= %s", (cutoff,))
+        _run(f"DELETE FROM {self.table} WHERE spent_at <= %s", (cutoff,))
 
     def entries(self, since, until, user=None):
         if user is None:
-            return _run("SELECT spent_at, tokens FROM token_usage WHERE spent_at > %s AND spent_at <= %s "
+            return _run(f"SELECT spent_at, tokens FROM {self.table} WHERE spent_at > %s AND spent_at <= %s "
                         "ORDER BY spent_at", (since, until), fetch=True)
-        return _run("SELECT spent_at, tokens FROM token_usage WHERE spent_at > %s AND spent_at <= %s "
+        return _run(f"SELECT spent_at, tokens FROM {self.table} WHERE spent_at > %s AND spent_at <= %s "
                     "AND username = %s ORDER BY spent_at", (since, until, user), fetch=True)
+
+
+class PgRunning:
+    """At most one running question per user across instances (GR-COST-03). A hold left by a crashed
+    instance expires after stale_after seconds."""
+
+    def __init__(self, clock=time.time, stale_after=300):
+        self.clock, self.stale_after = clock, stale_after
+
+    @contextmanager
+    def hold(self, user):
+        from app.request_limits import Busy
+        now = self.clock()
+        _run("DELETE FROM running_questions WHERE username = %s AND started_at < %s", (user, now - self.stale_after))
+        got = _run("""INSERT INTO running_questions (username, started_at) VALUES (%s, %s)
+                      ON CONFLICT (username) DO NOTHING RETURNING username""", (user, now), fetch=True)
+        if not got:
+            raise Busy(user)
+        try:
+            yield
+        finally:
+            _run("DELETE FROM running_questions WHERE username = %s", (user,))

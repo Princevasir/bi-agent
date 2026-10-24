@@ -74,7 +74,9 @@ wait_ready
 note "Backend is ready."
 
 say "Applying database updates (safe to repeat)"
-docker compose exec -T db psql -q -U admin -d postgres -v ON_ERROR_STOP=1 < db/init/09_shared_state.sql >/dev/null
+for f in db/init/09_shared_state.sql db/init/10_request_limits.sql; do
+  docker compose exec -T db psql -q -U admin -d postgres -v ON_ERROR_STOP=1 < "$f" >/dev/null
+done
 note "Shared state tables are in place."
 
 say "Loading the retail demo data"

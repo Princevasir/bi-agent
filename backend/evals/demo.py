@@ -138,6 +138,10 @@ def run(cases):
     from app.sqltypes import TrustedSQL
 
     audit._write = lambda entry: None             # a rehearsal: keep it out of the audit trail
+    from app import main
+    from app.request_limits import MemoryRunning, RateLimiter
+    main.rate_limiter = RateLimiter(per_minute=10**6, per_day=10**6)   # 14 questions in 2 minutes (GR-COST-01)
+    main.running = MemoryRunning()
     refs = {name: run_readonly(trusted(name), role="analyst")["rows"] for name in REFERENCE_SQL}
     integrity = TrustedSQL("SELECT COUNT(*), SUM(line_total) FROM order_items")
     before = run_readonly(integrity, role="analyst")["rows"]
