@@ -48,6 +48,7 @@ The full list of what the project offers today. Keep it current as features land
 - Conversation history per user, readable through `GET /conversations/{id}`.
 
 ### Safety and access control
+- Privacy (GR-PRIV-01, -02, -04): personal columns (names, email, phone, street, postal code, salary) and any email address or phone number in the results are masked before the rows reach the model, while your screen still shows what your role may see; logs and the audit trail mask emails and phone numbers and record database errors by class only; requests to OpenRouter ask for no data collection by default.
 - Per-user limits: 10 questions a minute and 200 a day (GR-COST-01), 600,000 tokens a day (GR-COST-02) and one running question at a time (GR-COST-03), each refused with a clear 429 and audited as `rate_limited`; with `STATE_STORE=postgres` they hold across backend instances.
 - Cost check before execution (GR-SQL-03): every generated query is planned with `EXPLAIN` first, and one that would scan or join far too much (for example a product-level self-join of all order lines) is refused in milliseconds with "That question would scan too much data" instead of loading the database.
 - Every generated query passes a validator before it runs: exactly one `SELECT` (or a `UNION`, `INTERSECT` or `EXCEPT` of them), no write hidden anywhere in it, allowed tables only, no schema-qualified names, only functions from an approved list (so nothing that runs SQL from a string, reads server settings, or builds huge values), no `SELECT INTO` or locking, no joins without a join condition, at most 8 tables and 3 levels of nested subqueries. Queries that are too broad get a message suggesting a more specific question.
@@ -222,6 +223,7 @@ Set in `.env`; defaults come from `docker-compose.yml`.
 | `OPENROUTER_MODEL` | `qwen/qwen-2.5-coder-32b-instruct` | Any OpenRouter model slug |
 | `LLM_TIMEOUT_SECONDS` | 20 | Per LLM call |
 | `LLM_MAX_OUTPUT_TOKENS` | 512 | Per LLM call |
+| `LLM_PROVIDER_DATA_POLICY` | `deny` | What a hosted model provider may do with prompts (GR-PRIV-04): `deny` asks OpenRouter to route only to providers that do not collect data; `zdr` also requires zero data retention (with Groq it needs zero retention turned on in the Groq console and `GROQ_ZDR_CONFIRMED=true`, or the backend refuses to start); `allow` sends no preference. Ollama never leaves your machine |
 | `LLM_FALLBACK_PROVIDER` | none | A second provider used when the first times out, is rate-limited or fails, e.g. `groq` first and `ollama` as fallback |
 | `GROQ_TIMEOUT_SECONDS`, `OLLAMA_TIMEOUT_SECONDS`, `OPENROUTER_TIMEOUT_SECONDS` | `LLM_TIMEOUT_SECONDS` | Per-provider timeout, so a hosted model can fail fast while the local fallback gets longer |
 | `LLM_RETRY_ATTEMPTS` | 2 | Attempts per model call for transient failures (throttling, 5xx, dropped connection); 1 switches retries off. Timeouts, configuration errors and our own budget are never retried |

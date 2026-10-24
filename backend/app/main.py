@@ -135,8 +135,9 @@ async def db_error_handler(request: Request, exc: DBError):
         status, message = 403, "You don't have access to that data."
     else:
         status, message = 503, "The database is unavailable."
-    logger.warning("request_id=%s db_error=%s detail=%s cause=%r",
-                   _rid(request), type(exc).__name__, exc, exc.__cause__)
+    # GR-PRIV-02: the class only; Postgres's message can quote values from the data
+    logger.warning("db_error", extra={"request_id": _rid(request), "error": type(exc).__name__,
+                                      "cause": type(exc.__cause__).__name__ if exc.__cause__ else None})
     audit_event(request, "db_error", status, error=type(exc).__name__)
     return JSONResponse(status_code=status, content={"detail": message})
 

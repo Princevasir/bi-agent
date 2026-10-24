@@ -5,9 +5,13 @@ otherwise a plain answer is built from the rows instead. Answers from the knowle
 cite the documents they use, and any number must appear in them; otherwise the best document's
 own text is shown instead (demo gap D7).
 """
+import logging
 import re
 
 from app.bi.grounding import answer_prompt, fallback_answer, is_grounded
+from app.privacy import redact_rows
+
+logger = logging.getLogger("bi_agent")
 
 JOB = "Explains the result or the business documents, and falls back to plain text if anything is ungrounded."
 
@@ -20,7 +24,10 @@ def has_data(rows):
 
 def explain(state, ctx):
     question = state.get("standalone") or state["question"]
-    result = {"columns": state["columns"], "rows": state["rows"], "truncated": state["truncated"]}
+    rows, masked = redact_rows(state["columns"], state["rows"])         # GR-PRIV-01: the model never sees them
+    if masked:
+        logger.info("privacy_redacted", extra={"guardrail": "GR-PRIV-01", "count": masked})
+    result = {"columns": state["columns"], "rows": rows, "truncated": state["truncated"]}
     return {"draft": ctx.generate(answer_prompt(question, state["sql"], result)).strip()}
 
 

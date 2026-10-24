@@ -4,6 +4,8 @@ import os
 import psycopg
 from psycopg.types.json import Jsonb
 
+from app.privacy import redact_value
+
 logger = logging.getLogger("bi_agent.audit")
 
 NEVER_RECORD = {"password", "token", "access_token", "authorization"}
@@ -31,7 +33,7 @@ def record(event, *, request_id=None, username=None, role=None,
         "role": role,
         "event": event,
         "status_code": status_code,
-        "detail": {k: v for k, v in detail.items() if k.lower() not in NEVER_RECORD},
+        "detail": redact_value({k: v for k, v in detail.items() if k.lower() not in NEVER_RECORD}),   # GR-PRIV-02
     }
     try:
         _write(entry)
