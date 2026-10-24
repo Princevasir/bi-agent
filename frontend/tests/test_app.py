@@ -408,3 +408,9 @@ def test_a_knowledge_answer_shows_the_answer_its_sources_and_no_tabs(backend):
     assert not at.tabs
     [panel] = [e for e in at.expander if e.label.startswith("How I answered")]
     assert "Checked that the answer cites the documents" in " ".join(str(m.value) for m in panel.markdown)
+
+
+def test_an_answer_shows_its_assumptions(backend):
+    at = ask_with(backend, {**REGIONS, "assumptions": ["Dates: 1 Sep 2026 to 30 Sep 2026 (order_date)",
+                                                       "status is completed"]})
+    assert "Assumptions: Dates: 1 Sep 2026 to 30 Sep 2026 (order_date) · status is completed" in all_text(at)

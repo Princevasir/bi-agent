@@ -19,7 +19,7 @@ from app.auth import AuthConfigError, authenticate, create_token, current_user
 from app.bi import conversation
 from app.bi.conversation import MAX_STORED_ROWS, Turn
 from app.bi.schema import catalog_for, get_schema, metrics_for
-from app.bi.service import StepLimitError, answer_question
+from app.bi.service import DeadlineExceeded, StepLimitError, answer_question
 from app.bi.sql_guard import SQLRejected, validate_sql
 from app.bi.text_to_sql import generate_sql, is_no_query
 from app.db import (DBAccessError, DBError, DBQueryError, DBTimeoutError, QueryTooExpensiveError, ResultTooLargeError, TrustedSQL,
@@ -148,6 +148,14 @@ async def sql_rejected_handler(request: Request, exc: SQLRejected):
     audit_event(request, "sql_rejected", 422, reason=str(exc))
     return JSONResponse(status_code=422,
                         content={"detail": exc.user_message or "The generated query was rejected."})
+
+
+@app.exception_handler(DeadlineExceeded)
+async def deadline_handler(request: Request, exc: DeadlineExceeded):
+    logger.warning("deadline_exceeded", extra={"request_id": _rid(request), "guardrail": "GR-WF-02"})
+    audit_event(request, "deadline_exceeded", 504, guardrail="GR-WF-02", reason=str(exc))
+    return JSONResponse(status_code=504,
+                        content={"detail": "That question took too long to answer. Please try a simpler question."})
 
 
 @app.exception_handler(StepLimitError)

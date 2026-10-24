@@ -1,3 +1,5 @@
+from app.prompt_safety import FENCE_NOTE, fence
+
 RECENT_TURNS = 3
 
 
@@ -11,6 +13,7 @@ def rewrite_prompt(question, history, today):
         "Keep every explicit date and number from the latest question. "
         "Return only the question.\n\n"
         f"Today's date: {today.isoformat()}\n\n"
-        f"Conversation so far:\n{context}\n\n"
-        f"Latest question: {question}\nStandalone question:"
+        f"{FENCE_NOTE}\n\n"
+        f"Conversation so far:\n{fence('conversation', context)}\n\n"
+        f"Latest question:\n{fence('question', question)}\nStandalone question:"
     )

@@ -1,5 +1,7 @@
 import re
 
+from app.prompt_safety import FENCE_NOTE, fence
+
 NUM = re.compile(r"\d[\d,]*\.?\d*")
 
 
@@ -31,10 +33,11 @@ def fallback_answer(columns, rows):
 
 
 def answer_prompt(question, sql, result):
+    rows = f"columns: {result['columns']}\nrows: {result['rows'][:50]}\ntruncated: {result['truncated']}"
     return (
         "Answer the question in one or two sentences using ONLY the data below. "
         "Do not use any number that is not in the data. A chart is drawn automatically from the data; "
-        "do not explain how to make one.\n\n"
-        f"Question: {question}\nSQL: {sql}\nColumns: {result['columns']}\n"
-        f"Rows: {result['rows'][:50]}\nTruncated: {result['truncated']}"
+        "do not explain how to make one. "
+        f"{FENCE_NOTE}\n\n"
+        f"Question:\n{fence('question', question)}\nSQL:\n{fence('sql', sql)}\nResult:\n{fence('rows', rows)}"
     )

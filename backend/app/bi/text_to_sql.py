@@ -4,6 +4,7 @@ from datetime import date
 from app import policy
 from app.access import denied_columns
 from app.bi.schema import hints_text, metrics_text, schema_text
+from app.prompt_safety import FENCE_NOTE, fence
 
 FENCE = re.compile(r"```(?:sql)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
 NO_QUERY = "NO_QUERY"
@@ -74,7 +75,7 @@ def build_prompt(question: str, today: date, role: str = "analyst", repair=None,
         + knowledge_text(knowledge)
         + f"{rules_text(role)}\n\n"
         f"{repair_text(repair)}"
-        f"Question: {question}\nSQL:"
+        f"{FENCE_NOTE}\nQuestion:\n{fence('question', question)}\nSQL:"
     )
 
 

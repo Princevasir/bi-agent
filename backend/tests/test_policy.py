@@ -45,11 +45,12 @@ def test_policy_file_reproduces_the_previous_rules():
     assert {r: role.tables for r, role in p.roles.items()} == BEFORE["roles"]
     assert {r: role.database_url_env for r, role in p.roles.items()} == BEFORE["db_env"]
     # GR-WF-01 added repair_attempts later; every value that existed before is unchanged.
-    later = ("repair_attempts", "decline_retries", "max_steps", "max_plan_cost", "max_plan_rows")
+    later = ("repair_attempts", "decline_retries", "max_steps", "max_plan_cost", "max_plan_rows", "deadline_seconds")
     assert {k: v for k, v in p.sql.items() if k not in later} == BEFORE["limits"]
     assert p.sql["repair_attempts"] == 1 and p.sql["decline_retries"] == 1   # added later (GR-WF-01)
     assert p.sql["max_steps"] == 15                                         # added later (demo gap D1)
     assert (p.sql["max_plan_cost"], p.sql["max_plan_rows"]) == (1_000_000, 10_000_000)   # added later (GR-SQL-03)
+    assert p.sql["deadline_seconds"] == 300                                 # added later (GR-WF-02)
     assert p.allowed_function_types == BEFORE["types"]
     assert p.allowed_function_names == BEFORE["names"]
     assert p.blocked_prefixes == BEFORE["prefixes"]

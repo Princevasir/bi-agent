@@ -13,10 +13,15 @@ from langgraph.errors import GraphRecursionError
 from langgraph.graph import END, START, StateGraph
 
 from app import limits
+from app.bi.assumptions import assumptions
 from app.agents import OWNER, analyst, chart, coordinator, sql
 from app.agents import knowledge as knowledge_agent
 from app.agents.analyst import has_data  # noqa: F401  (used by the evaluation harness)
 from app.agents.sql import NO_QUERY_ANSWER  # noqa: F401
+
+
+class DeadlineExceeded(Exception):
+    """The question passed its deadline; no further step was started (GR-WF-02)."""
 
 
 class StepLimitError(Exception):
@@ -51,6 +56,7 @@ class State(TypedDict, total=False):
 class Context:
     generate: Callable
     knowledge: Optional[Callable] = None
+    deadline: Optional[float] = None          # time.monotonic() value after which no step starts (GR-WF-02)
 
 
 STEPS = {
@@ -66,6 +72,8 @@ STEPS = {
 
 def _traced(name, step, ctx):
     def run(state):
+        if ctx.deadline is not None and time.monotonic() > ctx.deadline:
+            raise DeadlineExceeded(f"The question passed its deadline before step {name}.")
         started = time.perf_counter()
         out = step(state, ctx)
         ms = round((time.perf_counter() - started) * 1000, 1)
@@ -73,8 +81,8 @@ def _traced(name, step, ctx):
     return run
 
 
-def build_graph(generate, knowledge=None):
-    ctx = Context(generate, knowledge)
+def build_graph(generate, knowledge=None, deadline=None):
+    ctx = Context(generate, knowledge, deadline)
     g = StateGraph(State)
     for name, step in STEPS.items():
         g.add_node(name, _traced(name, step, ctx))
@@ -106,7 +114,8 @@ def answer_question(question, generate, today, history=None, role="analyst", kno
     state = {"question": question, "today": today, "history": history or [], "role": role, "trace": []}
     max_steps = limits.workflow_max_steps()
     try:
-        out = build_graph(generate, knowledge).invoke(state, config={"recursion_limit": max_steps})
+        deadline = time.monotonic() + limits.request_deadline_seconds()
+        out = build_graph(generate, knowledge, deadline).invoke(state, config={"recursion_limit": max_steps})
     except GraphRecursionError as e:
         raise StepLimitError(f"The workflow did not finish within {max_steps} steps.") from e
     return {
@@ -115,6 +124,7 @@ def answer_question(question, generate, today, history=None, role="analyst", kno
         "route": out["route"],
         "intent": out.get("intent"),
         "sql": out["sql"],
+        "assumptions": assumptions(out["sql"]) if out["sql"] else [],      # GR-ACC-03
         "columns": out["columns"],
         "rows": out["rows"],
         "truncated": out["truncated"],

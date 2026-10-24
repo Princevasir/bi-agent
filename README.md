@@ -48,6 +48,9 @@ The full list of what the project offers today. Keep it current as features land
 - Conversation history per user, readable through `GET /conversations/{id}`.
 
 ### Safety and access control
+- Injection hardening (GR-INJ-01 to -03): questions, history, results and failed queries are fenced as data in every prompt; answers containing SQL, links or instruction-like text are replaced by the plain answer; the retail data contains planted injections (a product and a campaign name) that the adversarial evaluation reads.
+- Every data answer shows its assumptions, read from the SQL: the date range and filters it used (GR-ACC-03). A "why" question answered from data never claims a cause; the answer says the data shows what happened, not why (GR-ACC-04).
+- One deadline per question (GR-WF-02, 300 s): no further step starts after it.
 - Privacy (GR-PRIV-01, -02, -04): personal columns (names, email, phone, street, postal code, salary) and any email address or phone number in the results are masked before the rows reach the model, while your screen still shows what your role may see; logs and the audit trail mask emails and phone numbers and record database errors by class only; requests to OpenRouter ask for no data collection by default.
 - Per-user limits: 10 questions a minute and 200 a day (GR-COST-01), 600,000 tokens a day (GR-COST-02) and one running question at a time (GR-COST-03), each refused with a clear 429 and audited as `rate_limited`; with `STATE_STORE=postgres` they hold across backend instances.
 - Cost check before execution (GR-SQL-03): every generated query is planned with `EXPLAIN` first, and one that would scan or join far too much (for example a product-level self-join of all order lines) is refused in milliseconds with "That question would scan too much data" instead of loading the database.
@@ -193,7 +196,7 @@ All routes except the first four need `Authorization: Bearer <token>` from `/aut
 | GET | `/hello` | Smoke test |
 | GET | `/ready` | Readiness: 200 when both databases answer, 503 otherwise |
 | POST | `/auth/login` | `{"username", "password"}` → access token and role |
-| POST | `/ask` | `{"message", "conversation_id"?}` → answer, SQL, rows, chart, sources (knowledge documents used), route, trace (agent, step and milliseconds for each step), conversation ID |
+| POST | `/ask` | `{"message", "conversation_id"?}` → answer, SQL, assumptions (dates and filters the query used), rows, chart, sources (knowledge documents used), route, trace (agent, step and milliseconds for each step), conversation ID |
 | POST | `/ask/sql` | Generate and validate SQL for a question without running it (422 if the validator rejects it) |
 | GET | `/conversations/{id}` | Turns of one of your own conversations |
 | GET | `/schema` | Tables and columns your role can see |
@@ -242,6 +245,7 @@ Set in `.env`; defaults come from `docker-compose.yml`.
 | `SQL_MAX_TABLES` | 8 | Table references allowed in one query |
 | `SQL_MAX_DEPTH` | 3 | How deeply subqueries may be nested |
 | `SQL_MAX_PLAN_COST`, `SQL_MAX_PLAN_ROWS` | 1000000, 10000000 | Planner estimates above which a generated query is refused before it runs (GR-SQL-03); rows are counted at the largest plan step |
+| `REQUEST_DEADLINE_SECONDS` | 300 | Deadline for one question: no further workflow step starts after it, and the user gets 504 "That question took too long" (GR-WF-02) |
 | `WORKFLOW_MAX_STEPS` | 15 | Steps one question may take through the workflow; a run that reaches it is stopped with a 422 |
 | `LOG_LEVEL` | `INFO` | Backend log level |
 | `LOG_FORMAT` | `json` | `json` (one JSON object per line) or `text` for easier local reading |

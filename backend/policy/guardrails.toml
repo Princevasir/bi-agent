@@ -17,6 +17,7 @@ repair_attempts = 1         # retries after a fixable SQL failure; 0 switches re
 decline_retries = 1         # second opinions when the model declines a question that mentions the data
 max_plan_cost = 1000000     # planner cost above which generated SQL is not run (GR-SQL-03); legit max 81,373
 max_plan_rows = 10000000    # planner rows at the largest step (GR-SQL-03); legit max 616,532, bomb 314M
+deadline_seconds = 300      # whole-question deadline; no step starts after it (GR-WF-02); local model paths take 20-110 s
 max_steps = 15              # workflow steps per question; the longest legitimate path takes 13 (demo gap D1)
 
 [sql.functions]

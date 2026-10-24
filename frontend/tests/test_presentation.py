@@ -104,3 +104,12 @@ def test_an_unknown_step_or_missing_time_still_shows():
 
 def test_the_total_time_is_the_sum_of_the_steps():
     assert total_seconds(TRACE) == "27.8 s" and total_seconds([]) == ""
+
+
+# ---- GR-ACC-03: assumptions -----------------------------------------------------------------------------
+
+def test_assumptions_become_one_line():
+    from presentation import assumption_line
+    assert assumption_line(["Dates: 1 Sep 2026 to 30 Sep 2026 (order_date)", "status is completed"]) == \
+        "Assumptions: Dates: 1 Sep 2026 to 30 Sep 2026 (order_date) · status is completed"
+    assert assumption_line([]) is None and assumption_line(None) is None

@@ -66,6 +66,11 @@ def sql_max_plan_rows():
     return _limit("SQL_MAX_PLAN_ROWS", "max_plan_rows")
 
 
+def request_deadline_seconds():
+    """Seconds one question may take before no further workflow step starts (GR-WF-02)."""
+    return _limit("REQUEST_DEADLINE_SECONDS", "deadline_seconds")
+
+
 def decline_retries():
     """Second opinions when the model declines a question that clearly mentions the data."""
     return _limit("DECLINE_RETRIES", "decline_retries", minimum=0)

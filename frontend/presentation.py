@@ -113,3 +113,8 @@ def trace_lines(trace):
 
 def total_seconds(trace):
     return _seconds(sum(t.get("ms", 0) for t in trace)) if trace else ""
+
+
+def assumption_line(assumptions):
+    """GR-ACC-03: the dates and filters the query used, on one line, or None."""
+    return "Assumptions: " + " · ".join(assumptions) if assumptions else None

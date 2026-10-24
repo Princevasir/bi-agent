@@ -4,8 +4,8 @@ import streamlit as st
 import client
 from charts import LABELS, build_figure
 from client import BackendError
-from presentation import (is_declined, is_no_data, pretty_label, single_value, source_line, status_for,
-                          total_seconds, trace_lines)
+from presentation import (assumption_line, is_declined, is_no_data, pretty_label, single_value, source_line,
+                          status_for, total_seconds, trace_lines)
 
 st.set_page_config(page_title="BI Agent", page_icon="📊", layout="wide")
 
@@ -117,6 +117,8 @@ def show_answer(msg, index):
         st.caption(f"Interpreted as: {plain(msg['interpreted_as'])}")
     if sources := source_line(msg.get("sources")):
         st.caption(plain(sources))
+    if assumed := assumption_line(msg.get("assumptions")):
+        st.caption(plain(assumed))
     if msg.get("chart_note"):
         st.info(msg["chart_note"], icon="ℹ️")
     card = single_value(msg["columns"], msg["rows"])

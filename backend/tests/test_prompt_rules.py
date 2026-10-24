@@ -84,4 +84,4 @@ def test_every_function_the_prompt_offers_is_accepted_by_the_validator(name):
 
 def test_question_comes_after_the_rules():
     prompt = build_prompt("What was revenue?", TODAY)
-    assert prompt.index("Rules") < prompt.index("Question: What was revenue?")
+    assert prompt.index("Rules") < prompt.index("<<<question\nWhat was revenue?")   # fenced since GR-INJ-01

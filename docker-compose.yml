@@ -45,6 +45,7 @@ services:
       SQL_MAX_PLAN_COST: ${SQL_MAX_PLAN_COST:-1000000}
       SQL_MAX_PLAN_ROWS: ${SQL_MAX_PLAN_ROWS:-10000000}
       WORKFLOW_MAX_STEPS: ${WORKFLOW_MAX_STEPS:-15}
+      REQUEST_DEADLINE_SECONDS: ${REQUEST_DEADLINE_SECONDS:-300}
       STATE_STORE: ${STATE_STORE:-postgres}   # conversations, sign-in throttle, token budget shared by instances (D11)
       DATABASE_URL: postgresql://bi_readonly:readonly_dev_pw@db:5432/analytics
       APP_DATABASE_URL: postgresql://app_rw:app_dev_pw@db:5432/appdb
