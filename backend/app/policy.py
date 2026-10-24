@@ -32,6 +32,7 @@ class Role:
     tables: tuple
     database_url_env: str
     personal_data: bool = False
+    export: bool = False          # may download result tables; every export is audited (GR-PRIV-05)
 
 
 @dataclass(frozen=True)
@@ -144,7 +145,7 @@ def load(path=None):
         parsed_roles = {}
         for name, role in roles.items():
             where = f"[sources.{source_name}.roles.{name}]"
-            _keys(role, where, ("tables", "database_url_env"), ("personal_data",))
+            _keys(role, where, ("tables", "database_url_env"), ("personal_data", "export"))
             tables = _strings(role["tables"], f"{where} tables") if role["tables"] else None
             if not tables:
                 raise PolicyError(f"{where} tables must list at least one table.")
@@ -157,7 +158,11 @@ def load(path=None):
             personal = role.get("personal_data", False)
             if not isinstance(personal, bool):
                 raise PolicyError(f"{where} personal_data must be true or false.")
-            parsed_roles[name] = Role(tables=tuple(tables), database_url_env=env, personal_data=personal)
+            export = role.get("export", False)
+            if not isinstance(export, bool):
+                raise PolicyError(f"{where} export must be true or false.")
+            parsed_roles[name] = Role(tables=tuple(tables), database_url_env=env, personal_data=personal,
+                                      export=export)
         parsed[source_name] = Source(catalog=source["catalog"], roles=parsed_roles)
 
     return Policy(

@@ -44,6 +44,11 @@ def _personal_columns():
                      for c in t.columns.values() if c.pii)
 
 
+def may_export(role):
+    """Whether the role may download result tables (GR-PRIV-05)."""
+    return _role(role).export
+
+
 def denied_columns(role):
     """(table, column) pairs the role may not read: personal data, unless the role is allowed it."""
     r = _role(role)

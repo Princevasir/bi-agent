@@ -32,7 +32,7 @@ from app.llm.base import (
 from app.llm.budget import from_env as budget_from_env
 from app import policy
 from app.logging_setup import configure_logging
-from app import request_limits
+from app import access, request_limits
 from app import throttle as login_throttle
 from app.request_limits import Busy, RateLimited
 
@@ -214,6 +214,13 @@ class AskRequest(ChatRequest):
     conversation_id: UUID | None = None
 
 
+class ExportRequest(BaseModel):
+    question: str = Field(max_length=2000)
+    columns: list[str] = Field(max_length=200)
+    row_count: int = Field(ge=0)
+    conversation_id: UUID | None = None
+
+
 class LoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=100)
     password: str = Field(min_length=1, max_length=200)
@@ -369,6 +376,17 @@ def knowledge_search(request: Request, q: str = Query(min_length=1, max_length=5
     audit_event(request, "knowledge_search", 200, query=q, sources=[h.document_id for h in hits])
     return {"hits": [{"document_id": h.document_id, "title": h.title, "doc_type": h.doc_type, "owner": h.owner,
                       "version": h.version, "score": h.score, "content": h.content} for h in hits]}
+
+
+@app.post("/exports")
+def record_export(body: ExportRequest, request: Request, user: User = Depends(signed_in)):
+    """GR-PRIV-05: the UI records an export here before it offers the file."""
+    if not access.may_export(user.role):
+        audit_event(request, "export_denied", 403, guardrail="GR-PRIV-05", question=body.question)
+        return JSONResponse(status_code=403, content={"detail": "Your role may not export data."})
+    audit_event(request, "export", 200, guardrail="GR-PRIV-05", question=body.question, columns=body.columns,
+                row_count=body.row_count, conversation_id=str(body.conversation_id) if body.conversation_id else None)
+    return {"recorded": True}
 
 
 @app.get("/catalog")

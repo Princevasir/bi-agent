@@ -82,10 +82,12 @@ catalog = false
 [sources.sample.roles.analyst]
 tables = ["orders", "regions"]
 database_url_env = "DATABASE_URL"
+export = true                 # GR-PRIV-05: allowed, and every export is audited
 
 [sources.sample.roles.limited]
 tables = ["regions"]
 database_url_env = "DATABASE_URL_LIMITED"
+export = true
 
 [sources.retail]
 catalog = true
@@ -101,8 +103,10 @@ tables = [
 ]
 database_url_env = "RETAIL_DATABASE_URL"
 personal_data = false
+export = true
 
 [sources.retail.roles.limited]
 tables = ["regions", "countries", "stores", "warehouses", "categories", "brands", "products", "product_prices"]
 database_url_env = "RETAIL_DATABASE_URL_LIMITED"
 personal_data = false
+export = true

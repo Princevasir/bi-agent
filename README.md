@@ -51,6 +51,7 @@ The full list of what the project offers today. Keep it current as features land
 - Injection hardening (GR-INJ-01 to -03): questions, history, results and failed queries are fenced as data in every prompt; answers containing SQL, links or instruction-like text are replaced by the plain answer; the retail data contains planted injections (a product and a campaign name) that the adversarial evaluation reads.
 - Every data answer shows its assumptions, read from the SQL: the date range and filters it used (GR-ACC-03). A "why" question answered from data never claims a cause; the answer says the data shows what happened, not why (GR-ACC-04).
 - One deadline per question (GR-WF-02, 300 s): no further step starts after it.
+- Table export with an audit trail (GR-PRIV-05): "Export CSV" under a table records the export in the backend first and only then offers the download; roles need `export = true` in the policy file (both roles have it).
 - Small groups are hidden (GR-PRIV-03): a total or average over fewer than 5 customers (for example "average spend of Platinum customers in one town") could reveal one person, so such result rows are removed and the answer says how many were hidden. Groups with no identifiable customers, such as guest orders, are kept.
 - Privacy (GR-PRIV-01, -02, -04): personal columns (names, email, phone, street, postal code, salary) and any email address or phone number in the results are masked before the rows reach the model, while your screen still shows what your role may see; logs and the audit trail mask emails and phone numbers and record database errors by class only; requests to OpenRouter ask for no data collection by default.
 - Per-user limits: 10 questions a minute and 200 a day (GR-COST-01), 600,000 tokens a day (GR-COST-02) and one running question at a time (GR-COST-03), each refused with a clear 429 and audited as `rate_limited`; with `STATE_STORE=postgres` they hold across backend instances.
@@ -202,6 +203,7 @@ All routes except the first four need `Authorization: Bearer <token>` from `/aut
 | GET | `/conversations/{id}` | Turns of one of your own conversations |
 | GET | `/schema` | Tables and columns your role can see |
 | GET | `/knowledge/search?q=` | The business documents closest to `q` that your role may read (used by the MCP tool) |
+| POST | `/exports` | Record a table export before the file is offered (`question`, `columns`, `row_count`); 403 if the role may not export (GR-PRIV-05) |
 | GET | `/catalog` | The data catalog your role can see: tables, columns, keys, relationships, descriptions, metrics |
 | GET | `/db/ping` | Database check as your role |
 | POST | `/chat` | Plain LLM reply (no data access) |

@@ -91,6 +91,22 @@ def how_i_answered(msg):
             st.markdown(f"{i}. **{agent}** · {plain(did)}" + (f" · {took}" if took else ""))
 
 
+def export_table(msg, index, df):
+    """GR-PRIV-05: the export is recorded by the backend first; only then is the file offered."""
+    ready = f"export-ready-{index}"
+    if st.button("Export CSV", key=f"export-{index}"):
+        payload = {"question": msg.get("question", ""), "columns": msg["columns"], "row_count": len(msg["rows"]),
+                   "conversation_id": msg.get("conversation_id")}
+        try:
+            client.post_json("/exports", payload, token=st.session_state.token)
+            st.session_state[ready] = True
+        except BackendError as e:
+            st.error(str(e), icon="🔒")
+    if st.session_state.get(ready):
+        st.download_button("Download CSV", df.to_csv(index=False), file_name="bi-agent-result.csv",
+                           mime="text/csv", key=f"download-{index}")
+
+
 def show_answer(msg, index):
     if msg.get("error"):
         show_status(msg["error"])
@@ -145,6 +161,7 @@ def show_answer(msg, index):
         st.dataframe(df, hide_index=True, width="stretch")
         if msg.get("truncated"):
             st.caption(f"Showing the first {len(msg['rows'])} rows.")
+        export_table(msg, index, df)
     if "🧩 SQL" in tabs:
         with tabs["🧩 SQL"]:
             st.code(msg["sql"], language="sql")

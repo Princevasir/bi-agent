@@ -414,3 +414,45 @@ def test_an_answer_shows_its_assumptions(backend):
     at = ask_with(backend, {**REGIONS, "assumptions": ["Dates: 1 Sep 2026 to 30 Sep 2026 (order_date)",
                                                        "status is completed"]})
     assert "Assumptions: Dates: 1 Sep 2026 to 30 Sep 2026 (order_date) · status is completed" in all_text(at)
+
+
+# ---- GR-PRIV-05: exports are recorded before the file is offered --------------------------------------------
+
+class ExportBackend(Backend):
+    def __init__(self, result=REGIONS, refuse=False):
+        super().__init__(result)
+        self.refuse = refuse
+
+    def post_json(self, path, payload, timeout=90.0, token=None):
+        if path == "/exports":
+            self.calls.append((path, payload, token))
+            if self.refuse:
+                raise BackendError("Your role may not export data.", 403)
+            return {"recorded": True}
+        return super().post_json(path, payload, timeout, token)
+
+
+def exporting_app(monkeypatch, refuse=False):
+    b = ExportBackend(refuse=refuse)
+    monkeypatch.setattr(client, "post_json", b.post_json)
+    monkeypatch.setattr(client, "login", lambda u, p: {"access_token": "tok", "role": "analyst"})
+    at = signed_in_app()
+    at.chat_input[0].set_value("Revenue by region in September 2026?").run()
+    return at, b
+
+
+def test_the_csv_is_offered_only_after_the_export_is_recorded(monkeypatch):
+    at, b = exporting_app(monkeypatch)
+    assert not at.get("download_button")
+    [export] = [x for x in at.button if x.label.startswith("Export CSV")]
+    export.click().run()
+    assert ("/exports", {"question": "Revenue by region in September 2026?", "columns": ["region_name", "revenue"],
+                         "row_count": 3, "conversation_id": "c-1"}, "tok") in b.calls
+    assert len(at.get("download_button")) == 1
+
+
+def test_a_refused_export_offers_no_file(monkeypatch):
+    at, b = exporting_app(monkeypatch, refuse=True)
+    [export] = [x for x in at.button if x.label.startswith("Export CSV")]
+    export.click().run()
+    assert not at.get("download_button") and "may not export" in " ".join(str(e.value) for e in at.error)
