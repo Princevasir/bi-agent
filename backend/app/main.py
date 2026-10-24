@@ -196,6 +196,14 @@ def question_limits(user: User = Depends(signed_in)):
         yield
 
 
+@app.exception_handler(Exception)
+async def unexpected_error_handler(request: Request, exc: Exception):
+    """Anything unplanned: a plain 500 for the user, the class for the audit and alerts (GR-OBS-02)."""
+    logger.error("server_error", extra={"request_id": _rid(request), "error": type(exc).__name__})
+    audit_event(request, "server_error", 500, guardrail="server-error", category="error", error=type(exc).__name__)
+    return JSONResponse(status_code=500, content={"detail": "Something went wrong. Please try again."})
+
+
 @app.exception_handler(AuthConfigError)
 async def auth_config_handler(request: Request, exc: AuthConfigError):
     logger.error("request_id=%s auth_config_error=%s", _rid(request), exc)

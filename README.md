@@ -51,6 +51,7 @@ The full list of what the project offers today. Keep it current as features land
 - Injection hardening (GR-INJ-01 to -03): questions, history, results and failed queries are fenced as data in every prompt; answers containing SQL, links or instruction-like text are replaced by the plain answer; the retail data contains planted injections (a product and a campaign name) that the adversarial evaluation reads.
 - Every data answer shows its assumptions, read from the SQL: the date range and filters it used (GR-ACC-03). A "why" question answered from data never claims a cause; the answer says the data shows what happened, not why (GR-ACC-04).
 - One deadline per question (GR-WF-02, 300 s): no further step starts after it.
+- Alerts (GR-OBS-02): `python -m app.alerts` raises an alert for repeated access denials, any server error, a spike of cost rejections or token spend over a daily limit; unexpected errors return a plain 500 and are audited as `server_error`.
 - Every guardrail decision is audited with the guardrail's ID, a category, the request ID and its latency (GR-OBS-01), so `SELECT detail->>'guardrail', count(*) FROM audit.events ... GROUP BY 1` shows which guardrails fire.
 - Table export with an audit trail (GR-PRIV-05): "Export CSV" under a table records the export in the backend first and only then offers the download; roles need `export = true` in the policy file (both roles have it).
 - Small groups are hidden (GR-PRIV-03): a total or average over fewer than 5 customers (for example "average spend of Platinum customers in one town") could reveal one person, so such result rows are removed and the answer says how many were hidden. Groups with no identifiable customers, such as guest orders, are kept.
@@ -301,6 +302,16 @@ or to Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_confi
 ```
 
 The password sits in your local client configuration, so use a dedicated BI Agent user. If the backend is down or a question is rejected, the tool returns the plain reason as a tool error.
+
+### Alerts
+
+`python -m app.alerts` checks the audit trail and the token ledger and prints an alert, exiting 1, when: one user has 5 or more access denials within 10 minutes; any unexpected server error happened in the last 10 minutes; 10 or more cost rejections happened in an hour; or more than 2,000,000 model tokens were spent in 24 hours (`ALERT_DENIALS`, `ALERT_COST_REJECTIONS`, `ALERT_DAILY_TOKENS` change the thresholds). It reads with the read-only `audit_reader` login:
+
+```bash
+cd backend && ALERTS_DATABASE_URL=postgresql://audit_reader:audit_reader_dev_pw@localhost:5433/appdb .venv/bin/python -m app.alerts
+```
+
+Run it from cron or a scheduler; on AWS (M26) the same rules become CloudWatch alarms.
 
 ### Demo dry run
 

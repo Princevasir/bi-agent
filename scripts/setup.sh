@@ -74,7 +74,7 @@ wait_ready
 note "Backend is ready."
 
 say "Applying database updates (safe to repeat)"
-for f in db/init/09_shared_state.sql db/init/10_request_limits.sql; do
+for f in db/init/09_shared_state.sql db/init/10_request_limits.sql db/init/11_audit_reader.sql; do
   docker compose exec -T db psql -q -U admin -d postgres -v ON_ERROR_STOP=1 < "$f" >/dev/null
 done
 note "Shared state tables are in place."

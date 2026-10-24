@@ -40,3 +40,22 @@ def record(event, *, request_id=None, username=None, role=None,
     except Exception:
         # Fail open: an audit outage must not block users. The failure is logged.
         logger.exception("audit_write_failed event=%s request_id=%s", event, request_id)
+
+
+# ---- reading the trail for alerts (GR-OBS-02), with the read-only audit_reader login ------------------------
+
+def recent_events(url, since):
+    """Audit events since `since` (a timezone-aware datetime), oldest first."""
+    with psycopg.connect(url, connect_timeout=5) as conn:
+        rows = conn.execute("SELECT ts, username, event, detail FROM audit.events WHERE ts >= %s ORDER BY ts",
+                            (since,)).fetchall()
+    return [{"ts": ts, "username": username, "event": event, "detail": detail or {}}
+            for ts, username, event, detail in rows]
+
+
+def tokens_since(url, since):
+    """Model tokens spent since `since`, from the shared token ledger (STATE_STORE=postgres)."""
+    with psycopg.connect(url, connect_timeout=5) as conn:
+        (total,) = conn.execute("SELECT COALESCE(SUM(tokens), 0) FROM token_usage WHERE spent_at >= %s",
+                                (since.timestamp(),)).fetchone()
+    return int(total)
